@@ -286,6 +286,21 @@
         #save-edit-btn:hover {
             background-color: #505a5f;
         }
+        
+        .ai-generate-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 20px;
+            border-radius: 4px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 0 #92979a;
+            border: 1px solid #bfc1c3;
+        }
+        
+        .ai-generate-section h3 {
+            margin: 0;
+        }
 
         .message {
             margin-top: 10px;
@@ -318,6 +333,46 @@
             height: 40px;
             animation: spin 1s linear infinite;
         }
+        
+        .modal {
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background-color: #fff;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-height: 80vh;
+            overflow-y: auto;
+            border-radius: 4px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .close-btn {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        
+        .close-btn:hover,
+        .close-btn:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        
 
         @keyframes spin {
             0% { transform: rotate(0deg); }
@@ -400,6 +455,7 @@
                     <div class="controls-actions">
                         <button id="delete-btn" class="btn btn-destructive">Delete</button>
                         <button id="edit-btn" class="btn btn-secondary">Edit</button>
+                        <button id="explain-btn" class="btn btn-secondary">✨ Explain</button>
                     </div>
                     
                     <div id="info-bar" class="info-bar">
@@ -414,24 +470,48 @@
 
         <!-- Tab content for adding/editing flashcards -->
         <div id="manage-cards-view" class="tab-content">
+            <!-- Section for manual input -->
             <form id="card-form" class="card-form">
+                <h3>Add a Card Manually</h3>
                 <input type="text" id="question-input" placeholder="Enter Question" required>
-                <input type="text" id="answer-input" placeholder="Enter Answer" required>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="answer-input" placeholder="Enter Answer" required style="flex-grow: 1;">
+                    <button type="button" id="generate-answer-btn" class="btn btn-secondary">✨ Generate Answer</button>
+                </div>
                 <button type="submit" id="add-card-btn" class="btn btn-primary">Add Flashcard</button>
                 <button type="button" id="save-edit-btn" class="btn btn-secondary" style="display: none;">Save Changes</button>
                 <div id="message" class="message"></div>
             </form>
+            
+            <hr style="margin: 20px 0;">
+
+            <!-- Section for AI-powered generation -->
+            <div id="ai-generate-section" class="ai-generate-section">
+                <h3>✨ Generate a Deck</h3>
+                <input type="text" id="topic-input" placeholder="Enter a topic (e.g., 'solar system')" required>
+                <button type="button" id="generate-deck-btn" class="btn btn-primary">Generate Deck of Cards</button>
+                <div id="ai-message" class="message"></div>
+            </div>
         </div>
     </div>
     
     <div id="user-info" class="info-bar" style="margin-top: 20px;">
         <div id="user-id-display"></div>
     </div>
+    
+    <!-- The Modal -->
+    <div id="explanation-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h3 id="explanation-title">Explanation</h3>
+            <p id="explanation-content"></p>
+        </div>
+    </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, collection, query, where, addDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, onSnapshot, collection, query, addDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Global variables for Firebase configuration and app ID
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -464,6 +544,7 @@
         const deleteBtn = document.getElementById('delete-btn');
         const editBtn = document.getElementById('edit-btn');
         const shuffleBtn = document.getElementById('shuffle-btn');
+        const explainBtn = document.getElementById('explain-btn');
         const cardCounterElement = document.getElementById('card-counter');
 
         const cardForm = document.getElementById('card-form');
@@ -472,7 +553,72 @@
         const addCardBtn = document.getElementById('add-card-btn');
         const saveEditBtn = document.getElementById('save-edit-btn');
         const messageElement = document.getElementById('message');
+        const aiMessageElement = document.getElementById('ai-message');
         const userIdDisplay = document.getElementById('user-id-display');
+        
+        const generateAnswerBtn = document.getElementById('generate-answer-btn');
+        const topicInput = document.getElementById('topic-input');
+        const generateDeckBtn = document.getElementById('generate-deck-btn');
+        
+        const explanationModal = document.getElementById('explanation-modal');
+        const closeModalBtn = document.querySelector('.close-btn');
+        const explanationTitle = document.getElementById('explanation-title');
+        const explanationContent = document.getElementById('explanation-content');
+        
+        // Helper function for exponential backoff
+        async function fetchWithBackoff(url, options, retries = 5, delay = 1000) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.status !== 429) { // Not a rate limit error
+                        return response;
+                    }
+                } catch (error) {
+                    console.error("Fetch failed, retrying...", error);
+                }
+                await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
+            }
+            throw new Error('Max retries exceeded');
+        }
+
+        // Function to make a Gemini API call
+        async function fetchGeminiResponse(prompt, schema = null) {
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            
+            let payload = {
+                contents: [{
+                    role: "user",
+                    parts: [{ text: prompt }]
+                }]
+            };
+
+            if (schema) {
+                payload.generationConfig = {
+                    responseMimeType: "application/json",
+                    responseSchema: schema
+                };
+            }
+            
+            const options = {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            };
+
+            const response = await fetchWithBackoff(apiUrl, options);
+            const result = await response.json();
+            
+            if (result.candidates && result.candidates.length > 0 &&
+                result.candidates[0].content && result.candidates[0].content.parts &&
+                result.candidates[0].content.parts.length > 0) {
+                const text = result.candidates[0].content.parts[0].text;
+                return text;
+            } else {
+                console.error("Unexpected API response structure:", result);
+                throw new Error("API did not return a valid response.");
+            }
+        }
 
         // Function to switch between the two views
         function switchView(view) {
@@ -490,13 +636,14 @@
         }
         
         // Function to show a message to the user
-        function showMessage(text, type = 'success') {
-            messageElement.textContent = text;
-            messageElement.className = `message ${type}`;
+        function showMessage(text, type = 'success', target = 'form') {
+            const element = target === 'form' ? messageElement : aiMessageElement;
+            element.textContent = text;
+            element.className = `message ${type}`;
             setTimeout(() => {
-                messageElement.textContent = '';
-                messageElement.className = 'message';
-            }, 3000);
+                element.textContent = '';
+                element.className = 'message';
+            }, 5000);
         }
 
         // Function to update the card content, counter, and button states
@@ -519,6 +666,7 @@
             deleteBtn.disabled = !hasCards;
             editBtn.disabled = !hasCards;
             shuffleBtn.disabled = !hasCards;
+            explainBtn.disabled = !hasCards;
             
             // Hide spinner and show content
             loadingSpinner.style.display = 'none';
@@ -573,10 +721,10 @@
                 // Get the ID of the current card to delete
                 const cardToDelete = flashcards[currentCardIndex];
                 await deleteDoc(doc(db, `/artifacts/${appId}/public/data/flashcards/${cardToDelete.id}`));
-                showMessage('Flashcard deleted!', 'error');
+                showMessage('Flashcard deleted!', 'error', 'form');
             } catch (e) {
                 console.error("Error deleting flashcard:", e);
-                showMessage('Error deleting flashcard!', 'error');
+                showMessage('Error deleting flashcard!', 'error', 'form');
             }
         }
         
@@ -602,10 +750,10 @@
 
                 // Switch back to view cards
                 switchView('flashcard');
-                showMessage('Flashcard added successfully!', 'success');
+                showMessage('Flashcard added successfully!', 'success', 'form');
             } catch (e) {
                 console.error("Error adding flashcard:", e);
-                showMessage('Error adding flashcard!', 'error');
+                showMessage('Error adding flashcard!', 'error', 'form');
             }
         }
 
@@ -638,10 +786,10 @@
                 isEditing = false;
                 toggleFormButtons();
                 switchView('flashcard');
-                showMessage('Changes saved!', 'success');
+                showMessage('Changes saved!', 'success', 'form');
             } catch (e) {
                 console.error("Error saving flashcard:", e);
-                showMessage('Error saving flashcard!', 'error');
+                showMessage('Error saving flashcard!', 'error', 'form');
             }
         }
         
@@ -682,7 +830,106 @@
             } else {
                 updateUI();
             }
-            showMessage('Flashcards shuffled!', 'success');
+            showMessage('Flashcards shuffled!', 'success', 'form');
+        }
+        
+        // AI-powered features
+        async function generateAnswer() {
+            if (!questionInput.value) {
+                showMessage('Please enter a question first.', 'error', 'form');
+                return;
+            }
+            
+            generateAnswerBtn.disabled = true;
+            generateAnswerBtn.textContent = 'Generating...';
+            try {
+                const prompt = `Provide a concise answer to the following question: "${questionInput.value}". The answer should be suitable for a flashcard, meaning it is brief and to the point.`;
+                const answer = await fetchGeminiResponse(prompt);
+                answerInput.value = answer;
+                showMessage('Answer generated!', 'success', 'form');
+            } catch (e) {
+                console.error("Error generating answer:", e);
+                showMessage('Error generating answer. Please try again.', 'error', 'form');
+            } finally {
+                generateAnswerBtn.disabled = false;
+                generateAnswerBtn.textContent = '✨ Generate Answer';
+            }
+        }
+        
+        async function generateDeck() {
+            if (!topicInput.value) {
+                showMessage('Please enter a topic first.', 'error', 'ai');
+                return;
+            }
+            
+            generateDeckBtn.disabled = true;
+            generateDeckBtn.textContent = 'Generating Deck...';
+            
+            try {
+                const prompt = `Generate 5 flashcards about "${topicInput.value}". Provide the output as a JSON array of objects, where each object has a 'question' key and an 'answer' key. Example: [{ "question": "Question 1", "answer": "Answer 1" }, { "question": "Question 2", "answer": "Answer 2" }]`;
+                const schema = {
+                    type: "ARRAY",
+                    items: {
+                        type: "OBJECT",
+                        properties: {
+                            "question": { "type": "STRING" },
+                            "answer": { "type": "STRING" }
+                        },
+                        "propertyOrdering": ["question", "answer"]
+                    }
+                };
+                const jsonResponse = await fetchGeminiResponse(prompt, schema);
+                const newCards = JSON.parse(jsonResponse);
+                
+                for (const card of newCards) {
+                    await addDoc(collection(db, `/artifacts/${appId}/public/data/flashcards`), {
+                        question: card.question,
+                        answer: card.answer,
+                        userId: userId,
+                        createdAt: new Date()
+                    });
+                }
+                
+                topicInput.value = '';
+                switchView('flashcard');
+                showMessage('Deck generated and added!', 'success', 'ai');
+            } catch (e) {
+                console.error("Error generating deck:", e);
+                showMessage('Error generating deck. Please try again.', 'error', 'ai');
+            } finally {
+                generateDeckBtn.disabled = false;
+                generateDeckBtn.textContent = 'Generate Deck of Cards';
+            }
+        }
+        
+        async function explainCardContent() {
+            if (flashcards.length === 0) return;
+            explainBtn.disabled = true;
+            
+            try {
+                const currentCard = flashcards[currentCardIndex];
+                explanationTitle.textContent = `Explanation for: ${currentCard.question}`;
+                explanationContent.innerHTML = '<div class="loading-spinner"></div>';
+                explanationModal.style.display = 'flex';
+                
+                const prompt = `Provide a detailed but easy-to-understand explanation for the following flashcard question and answer pair. Question: "${currentCard.question}". Answer: "${currentCard.answer}". Use markdown formatting, including bolding and lists, to make it easy to read.`;
+                const explanation = await fetchGeminiResponse(prompt);
+                
+                const formattedExplanation = explanation.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                                        .replace(/\n\n/g, '<p>')
+                                                        .replace(/\n/g, '<br>');
+                explanationContent.innerHTML = formattedExplanation;
+
+            } catch (e) {
+                console.error("Error generating explanation:", e);
+                explanationContent.textContent = 'Sorry, an error occurred while generating the explanation. Please try again.';
+            } finally {
+                explainBtn.disabled = false;
+            }
+        }
+        
+        function closeModal() {
+            explanationModal.style.display = 'none';
         }
 
         // Main function to initialize Firebase and load data
@@ -739,7 +986,7 @@
                 updateUI();
             }, (error) => {
                 console.error("Error getting flashcards:", error);
-                showMessage('Error loading flashcards!', 'error');
+                showMessage('Error loading flashcards!', 'error', 'form');
                 // Hide spinner even on error
                 loadingSpinner.style.display = 'none';
                 flashcardDisplay.style.display = 'block';
@@ -768,6 +1015,18 @@
         shuffleBtn.addEventListener('click', shuffleDeck);
         addCardBtn.addEventListener('click', addCard);
         saveEditBtn.addEventListener('click', saveEditedCard);
+        
+        // Event listeners for new Gemini API features
+        generateAnswerBtn.addEventListener('click', generateAnswer);
+        generateDeckBtn.addEventListener('click', generateDeck);
+        explainBtn.addEventListener('click', explainCardContent);
+        
+        closeModalBtn.addEventListener('click', closeModal);
+        window.addEventListener('click', (event) => {
+            if (event.target === explanationModal) {
+                closeModal();
+            }
+        });
 
         // Initial setup on page load
         init();
