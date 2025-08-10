@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -232,13 +233,6 @@
             font-size: 1em;
             color: #555;
         }
-        
-        .info-bar p {
-            margin: 0;
-            padding: 0;
-            font-size: 0.9em;
-            color: #6f777b;
-        }
 
         /* Styling for the form to add/edit new flashcards */
         .card-form {
@@ -251,6 +245,10 @@
             background-color: #ffffff;
             box-shadow: 0 2px 0 #92979a;
             border: 1px solid #bfc1c3;
+        }
+
+        .card-form h3 {
+            margin: 0 0 15px 0; /* Added bottom margin for spacing */
         }
 
         .card-form input {
@@ -304,10 +302,11 @@
             background-color: #ffffff;
             box-shadow: 0 2px 0 #92979a;
             border: 1px solid #bfc1c3;
+            margin-top: 20px; /* Added top margin for separation */
         }
         
         .ai-generate-section h3 {
-            margin: 0;
+            margin: 0 0 15px 0; /* Added bottom margin for spacing */
         }
 
         .message {
@@ -381,12 +380,6 @@
             cursor: pointer;
         }
         
-        /* New responsive input group for the 'Add cards' section */
-        .responsive-input-group {
-            display: flex;
-            gap: 10px;
-        }
-
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
@@ -430,13 +423,11 @@
                 width: 100%;
             }
             
-            /* The responsive-input-group now stacks vertically on smaller screens */
-            .responsive-input-group {
-                flex-direction: column;
-            }
-            
-            .responsive-input-group input,
-            .responsive-input-group button {
+            /* New rule to ensure form buttons are full width on mobile */
+            .card-form #add-card-btn,
+            .card-form #save-edit-btn,
+            .ai-generate-section #generate-deck-btn,
+            .card-form #generate-answer-btn { /* Added this for consistency */
                 width: 100%;
             }
         }
@@ -482,8 +473,7 @@
                     </div>
                     
                     <div id="info-bar" class="info-bar">
-                        <p id="card-counter"></p>
-                        <p id="user-id-display" style="font-size: 0.75em;"></p>
+                        <div id="card-counter"></div>
                     </div>
                 </div>
             </div>
@@ -499,10 +489,8 @@
                 <h3>Add a Card Manually</h3>
                 <input type="text" id="question-input" placeholder="Enter Question" required>
                 <!-- This div is now responsive -->
-                <div class="responsive-input-group">
-                    <input type="text" id="answer-input" placeholder="Enter Answer" required style="flex-grow: 1;">
-                    <button type="button" id="generate-answer-btn" class="btn btn-secondary">✨ Generate Answer</button>
-                </div>
+                <input type="text" id="answer-input" placeholder="Enter Answer" required>
+                <button type="button" id="generate-answer-btn" class="btn btn-secondary">✨ Generate Answer</button>
                 <button type="submit" id="add-card-btn" class="btn btn-primary">Add Flashcard</button>
                 <button type="button" id="save-edit-btn" class="btn btn-secondary" style="display: none;">Save Changes</button>
                 <div id="message" class="message"></div>
@@ -529,115 +517,8 @@
         </div>
     </div>
 
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // --- Firebase Configuration and Initialization ---
-        // These global variables are provided by the Canvas environment.
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        let db, auth, userId;
-        let unsubscribeFromFirestore = null;
-
-        async function initFirebase() {
-            try {
-                const app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
-
-                // Use onAuthStateChanged to handle authentication state.
-                onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        // User is signed in.
-                        userId = user.uid;
-                        document.getElementById('user-id-display').textContent = `User ID: ${userId}`;
-                        console.log("Firebase authenticated. User ID:", userId);
-                        
-                        // Start listening for flashcards once authenticated.
-                        listenForFlashcards();
-                    } else {
-                        // User is signed out. Attempt to sign in.
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(auth, initialAuthToken);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                    }
-                });
-            } catch (error) {
-                console.error("Error initializing Firebase:", error);
-            }
-        }
-
-        // --- Firestore Data Management ---
-        function listenForFlashcards() {
-            // Unsubscribe from any previous listener to prevent duplicates.
-            if (unsubscribeFromFirestore) {
-                unsubscribeFromFirestore();
-            }
-
-            const flashcardsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/flashcards`);
-            
-            // onSnapshot provides real-time updates.
-            unsubscribeFromFirestore = onSnapshot(flashcardsCollectionRef, (snapshot) => {
-                const newFlashcards = [];
-                snapshot.forEach(doc => {
-                    // Include the document ID for editing/deleting
-                    newFlashcards.push({ id: doc.id, ...doc.data() });
-                });
-                
-                // Update our local array and UI
-                flashcards = newFlashcards;
-                // Ensure currentCardIndex is still valid
-                if (currentCardIndex >= flashcards.length) {
-                    currentCardIndex = Math.max(0, flashcards.length - 1);
-                }
-                updateUI();
-            }, (error) => {
-                console.error("Error fetching flashcards:", error);
-                showMessage("Failed to load flashcards. Please try again.", "error");
-            });
-        }
-        
-        async function addFlashcardToDB(question, answer) {
-            try {
-                const flashcardsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/flashcards`);
-                await addDoc(flashcardsCollectionRef, { question, answer });
-                showMessage('Flashcard added successfully!');
-            } catch (error) {
-                console.error("Error adding flashcard:", error);
-                showMessage("Failed to add flashcard. Please try again.", "error");
-            }
-        }
-        
-        async function updateFlashcardInDB(cardId, newQuestion, newAnswer) {
-            try {
-                const docRef = doc(db, `artifacts/${appId}/users/${userId}/flashcards`, cardId);
-                await setDoc(docRef, { question: newQuestion, answer: newAnswer });
-                showMessage('Flashcard changes saved!', 'success');
-            } catch (error) {
-                console.error("Error updating flashcard:", error);
-                showMessage("Failed to save changes. Please try again.", "error");
-            }
-        }
-
-        async function deleteFlashcardFromDB(cardId) {
-            try {
-                const docRef = doc(db, `artifacts/${appId}/users/${userId}/flashcards`, cardId);
-                await deleteDoc(docRef);
-                showMessage('Flashcard deleted!', 'error');
-            } catch (error) {
-                console.error("Error deleting flashcard:", error);
-                showMessage("Failed to delete flashcard. Please try again.", "error");
-            }
-        }
-
-        // --- Core Flashcard Logic (now with Firestore integration) ---
+    <script>
+        // An array to store our flashcards in memory
         let flashcards = [];
         let currentCardIndex = 0;
         let isFlipped = false;
@@ -735,6 +616,17 @@
             }
         }
         
+        // --- Core Flashcard Logic ---
+        
+        // Function to load some initial cards
+        function loadInitialCards() {
+            return [
+                { question: "What is the capital of France?", answer: "Paris" },
+                { question: "Who wrote 'To Kill a Mockingbird'?", answer: "Harper Lee" },
+                { question: "What is the chemical symbol for water?", answer: "H2O" }
+            ];
+        }
+
         // Function to switch between the two views
         function switchView(view) {
             if (view === 'flashcard') {
@@ -829,24 +721,15 @@
             }
         }
         
-        // Function to handle the form submission for adding a new card
-        async function addCard(event) {
-            event.preventDefault();
-            const newQuestion = questionInput.value.trim();
-            const newAnswer = answerInput.value.trim();
-            if (newQuestion && newAnswer) {
-                await addFlashcardToDB(newQuestion, newAnswer);
-                cardForm.reset();
-            } else {
-                showMessage('Please fill in both fields.', 'error');
-            }
-        }
-
         // Function to delete the current card
-        async function deleteCard() {
+        function deleteCard() {
             if (flashcards.length === 0) return;
-            const cardToDelete = flashcards[currentCardIndex];
-            await deleteFlashcardFromDB(cardToDelete.id);
+            flashcards.splice(currentCardIndex, 1);
+            if (currentCardIndex >= flashcards.length) {
+                currentCardIndex = Math.max(0, flashcards.length - 1);
+            }
+            updateUI();
+            showMessage('Flashcard deleted!', 'error', 'form');
         }
         
         // Function to toggle between Add and Save buttons
@@ -872,6 +755,21 @@
             showMessage('Cards shuffled!', 'success', 'form');
         }
 
+        // Function to handle the form submission for adding a new card
+        function addCard(event) {
+            event.preventDefault();
+            const newQuestion = questionInput.value.trim();
+            const newAnswer = answerInput.value.trim();
+            if (newQuestion && newAnswer) {
+                flashcards.push({ question: newQuestion, answer: newAnswer });
+                cardForm.reset();
+                updateUI();
+                showMessage('Flashcard added successfully!');
+            } else {
+                showMessage('Please fill in both fields.', 'error');
+            }
+        }
+
         // Function to handle editing a card
         function editCard() {
             if (flashcards.length === 0) return;
@@ -884,15 +782,17 @@
         }
         
         // Function to save the edited card
-        async function saveEdit() {
+        function saveEdit() {
             const newQuestion = questionInput.value.trim();
             const newAnswer = answerInput.value.trim();
             if (newQuestion && newAnswer) {
-                const cardToUpdate = flashcards[currentCardIndex];
-                await updateFlashcardInDB(cardToUpdate.id, newQuestion, newAnswer);
+                flashcards[currentCardIndex].question = newQuestion;
+                flashcards[currentCardIndex].answer = newAnswer;
                 isEditing = false;
                 toggleFormButtons();
+                updateUI();
                 switchView('flashcard');
+                showMessage('Flashcard changes saved!', 'success');
             } else {
                 showMessage('Please fill in both fields.', 'error');
             }
@@ -975,12 +875,9 @@
             try {
                 const result = await fetchGeminiResponse(prompt, schema);
                 const newCards = JSON.parse(result);
-                // Add each new card to the database
-                for (const card of newCards) {
-                    await addFlashcardToDB(card.question, card.answer);
-                }
-                
+                flashcards = newCards;
                 currentCardIndex = 0;
+                updateUI();
                 switchView('flashcard');
                 showMessage(`Generated a deck of ${newCards.length} cards on "${topic}"!`, 'success', 'ai');
             } catch (error) {
@@ -1022,8 +919,9 @@
         generateAnswerBtn.addEventListener('click', generateAnswer);
         generateDeckBtn.addEventListener('click', generateDeck);
 
-        // Initialize Firebase on page load
-        initFirebase();
+        // Initial setup
+        flashcards = loadInitialCards();
+        updateUI();
     </script>
 </body>
 </html>
