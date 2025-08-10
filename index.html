@@ -252,6 +252,7 @@
             font-size: 1em;
             border-radius: 0;
             border: 2px solid #0b0c0c;
+            width: 100%; /* Ensure inputs take full width */
         }
         
         .card-form input:focus {
@@ -374,6 +375,11 @@
             cursor: pointer;
         }
         
+        /* New responsive input group for the 'Add cards' section */
+        .responsive-input-group {
+            display: flex;
+            gap: 10px;
+        }
 
         @keyframes spin {
             0% { transform: rotate(0deg); }
@@ -415,6 +421,16 @@
             }
             
             #flip-btn {
+                width: 100%;
+            }
+            
+            /* The responsive-input-group now stacks vertically on smaller screens */
+            .responsive-input-group {
+                flex-direction: column;
+            }
+            
+            .responsive-input-group input,
+            .responsive-input-group button {
                 width: 100%;
             }
         }
@@ -475,7 +491,8 @@
             <form id="card-form" class="card-form">
                 <h3>Add a Card Manually</h3>
                 <input type="text" id="question-input" placeholder="Enter Question" required>
-                <div style="display: flex; gap: 10px;">
+                <!-- This div is now responsive -->
+                <div class="responsive-input-group">
                     <input type="text" id="answer-input" placeholder="Enter Answer" required style="flex-grow: 1;">
                     <button type="button" id="generate-answer-btn" class="btn btn-secondary">✨ Generate Answer</button>
                 </div>
@@ -496,12 +513,6 @@
         </div>
     </div>
     
-    <div id="user-info" class="info-bar" style="margin-top: 20px;">
-        <div id="auth-status">
-            <button id="authorize-btn" class="btn btn-secondary">Connect to Google Drive</button>
-        </div>
-    </div>
-    
     <!-- The Modal -->
     <div id="explanation-modal" class="modal">
         <div class="modal-content">
@@ -511,16 +522,13 @@
         </div>
     </div>
 
-    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
     <script>
         // An empty array to store our flashcards in memory
         let flashcards = [];
         let currentCardIndex = 0;
         let isFlipped = false;
         let isEditing = false;
-        let driveFileId = null;
-        let authState = false;
-
+        
         // Get references to the HTML elements
         const flashcardView = document.getElementById('flashcard-view');
         const flashcardDisplay = document.getElementById('flashcard-display');
@@ -549,9 +557,6 @@
         const messageElement = document.getElementById('message');
         const aiMessageElement = document.getElementById('ai-message');
         
-        const authorizeBtn = document.getElementById('authorize-btn');
-        const authStatus = document.getElementById('auth-status');
-        
         const generateAnswerBtn = document.getElementById('generate-answer-btn');
         const topicInput = document.getElementById('topic-input');
         const generateDeckBtn = document.getElementById('generate-deck-btn');
@@ -560,16 +565,6 @@
         const closeModalBtn = document.querySelector('.close-btn');
         const explanationTitle = document.getElementById('explanation-title');
         const explanationContent = document.getElementById('explanation-content');
-        
-        // Google API client credentials
-        const CLIENT_ID = 'YOUR_CLIENT_ID'; // Replace with your actual client ID
-        const API_KEY = 'YOUR_API_KEY'; // Replace with your actual API key
-        const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
-        const FILE_NAME = 'flashcards.json';
-        
-        let tokenClient;
-        let gapiInited = false;
-        let gisInited = false;
         
         // Helper function for exponential backoff
         async function fetchWithBackoff(url, options, retries = 5, delay = 1000) {
@@ -626,176 +621,15 @@
             }
         }
         
-        // --- Google Drive Integration Functions ---
+        // --- Core Flashcard Logic ---
         
-        /**
-         * Callback after api.js is loaded.
-         */
-        function gapiLoaded() {
-          gapi.load('client', initializeGapiClient);
-        }
-
-        /**
-         * Callback after the API client is loaded. Loads the
-         * discovery doc to initialize the API.
-         */
-        async function initializeGapiClient() {
-          await gapi.client.init({
-            apiKey: API_KEY,
-            discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
-          });
-          gapiInited = true;
-          maybeEnableButtons();
-        }
-
-        /**
-         * Callback after GIS client is loaded.
-         */
-        function gisLoaded() {
-          tokenClient = google.accounts.oauth2.initTokenClient({
-            client_id: CLIENT_ID,
-            scope: SCOPES,
-            callback: '', // defined at request time
-          });
-          gisInited = true;
-          maybeEnableButtons();
-        }
-
-        /**
-         * Enables user interaction buttons after both gapi and gis are loaded.
-         */
-        function maybeEnableButtons() {
-            if (gapiInited && gisInited) {
-                authorizeBtn.disabled = false;
-            }
-        }
-
-        /**
-         * Sign in the user upon button click.
-         */
-        function handleAuthClick() {
-            tokenClient.callback = async (resp) => {
-                if (resp.error !== 'popup_closed' && resp.error !== 'access_denied') {
-                    console.log('Authentication successful!');
-                    authState = true;
-                    authStatus.innerHTML = '<span style="color: #00703c; font-weight: bold;">Google Drive Connected!</span>';
-                    authorizeBtn.style.display = 'none';
-                    await loadCardsFromDrive();
-                } else {
-                    console.error('Authentication failed:', resp.error);
-                    authState = false;
-                    authStatus.innerHTML = '<span style="color: #d4351c; font-weight: bold;">Connection Failed. Please try again.</span>';
-                }
-            };
-            
-            // Check if a token already exists
-            if (gapi.client.getToken() === null) {
-                tokenClient.requestAccessToken({prompt: 'consent'});
-            } else {
-                tokenClient.requestAccessToken({prompt: ''});
-            }
-        }
-        
-        /**
-         * Loads the flashcard data from Google Drive.
-         */
-        async function loadCardsFromDrive() {
-            if (!authState) {
-                console.error('Not authenticated.');
-                return;
-            }
-            
-            // Show loading spinner
-            loadingSpinner.style.display = 'flex';
-            flashcardDisplay.style.display = 'none';
-            
-            try {
-                // Check if the flashcard file exists in the appDataFolder
-                const response = await gapi.client.drive.files.list({
-                    'spaces': 'appDataFolder',
-                    'q': `name='${FILE_NAME}'`,
-                    'fields': 'files(id)'
-                });
-                
-                const files = response.result.files;
-                if (files.length > 0) {
-                    driveFileId = files[0].id;
-                    const fileContent = await gapi.client.drive.files.get({
-                        'fileId': driveFileId,
-                        'alt': 'media'
-                    });
-                    
-                    const newCards = JSON.parse(fileContent.body);
-                    if (newCards.length > 0) {
-                        flashcards = newCards;
-                        currentCardIndex = 0;
-                        updateUI();
-                        showMessage('Flashcards loaded from Google Drive!', 'success');
-                    } else {
-                        flashcards = [];
-                        updateUI();
-                        showMessage('Google Drive file is empty. Add new cards.', 'error');
-                    }
-                } else {
-                    // File doesn't exist, create it with initial data
-                    await saveFileToDrive(loadInitialCards(false));
-                    showMessage('Created new flashcard file in Google Drive.', 'success');
-                }
-            } catch (error) {
-                console.error('Error loading cards from Google Drive:', error);
-                showMessage('Error loading cards from Google Drive. Please check your connection.', 'error');
-            } finally {
-                loadingSpinner.style.display = 'none';
-                flashcardDisplay.style.display = 'block';
-            }
-        }
-
-        /**
-         * Saves the current flashcard data to Google Drive.
-         */
-        async function saveFileToDrive(data = flashcards) {
-            if (!authState) {
-                console.error('Not authenticated.');
-                return;
-            }
-            
-            const fileContent = JSON.stringify(data, null, 2);
-            
-            // If the file already exists, update it. Otherwise, create a new one.
-            if (driveFileId) {
-                try {
-                    await gapi.client.request({
-                        path: `/upload/drive/v3/files/${driveFileId}`,
-                        method: 'PATCH',
-                        params: { uploadType: 'media' },
-                        headers: { 'Content-Type': 'application/json' },
-                        body: fileContent
-                    });
-                    showMessage('Flashcards saved to Google Drive.', 'success');
-                } catch (error) {
-                    console.error('Error updating file in Google Drive:', error);
-                    showMessage('Error saving file to Google Drive. Check permissions.', 'error');
-                }
-            } else {
-                try {
-                    const response = await gapi.client.drive.files.create({
-                        resource: {
-                            'name': FILE_NAME,
-                            'mimeType': 'application/json',
-                            'parents': ['appDataFolder']
-                        },
-                        'media': {
-                            'mimeType': 'application/json',
-                            'body': fileContent
-                        }
-                    });
-                    driveFileId = response.result.id;
-                    showMessage('Flashcards saved to a new file in Google Drive.', 'success');
-                } catch (error) {
-                    console.error('Error creating file in Google Drive:', error);
-                    showMessage('Error creating file in Google Drive. Check permissions.', 'error');
-                }
-            }
+        // Function to load some initial cards
+        function loadInitialCards() {
+            return [
+                { question: "What is the capital of France?", answer: "Paris" },
+                { question: "Who wrote 'To Kill a Mockingbird'?", answer: "Harper Lee" },
+                { question: "What is the chemical symbol for water?", answer: "H2O" }
+            ];
         }
 
         // Function to switch between the two views
@@ -900,59 +734,10 @@
                 currentCardIndex = Math.max(0, flashcards.length - 1);
             }
             updateUI();
-            saveFileToDrive();
             showMessage('Flashcard deleted!', 'error', 'form');
         }
         
-        // Function to handle adding a new flashcard
-        function addCard(e) {
-            e.preventDefault(); 
-            const newQuestion = questionInput.value;
-            const newAnswer = answerInput.value;
-            
-            if (newQuestion && newAnswer) {
-                flashcards.push({ question: newQuestion, answer: newAnswer });
-                questionInput.value = '';
-                answerInput.value = '';
-                currentCardIndex = flashcards.length - 1;
-                updateUI();
-                saveFileToDrive();
-                switchView('flashcard');
-                showMessage('Flashcard added successfully!', 'success', 'form');
-            } else {
-                showMessage('Please fill out both fields.', 'error', 'form');
-            }
-        }
-
-        // Function to handle editing a flashcard
-        function editCard() {
-            if (flashcards.length === 0) return;
-            isEditing = true;
-            toggleFormButtons();
-            
-            // Populate the form with the current card's content
-            questionInput.value = flashcards[currentCardIndex].question;
-            answerInput.value = flashcards[currentCardIndex].answer;
-            questionInput.focus();
-            switchView('form');
-        }
-
-        // Function to save the edited card
-        function saveEditedCard() {
-            if (flashcards.length === 0) return;
-            flashcards[currentCardIndex].question = questionInput.value;
-            flashcards[currentCardIndex].answer = answerInput.value;
-
-            // Clear the form fields and switch back to view cards
-            isEditing = false;
-            toggleFormButtons();
-            updateUI();
-            saveFileToDrive();
-            switchView('flashcard');
-            showMessage('Changes saved!', 'success', 'form');
-        }
-        
-        // Function to toggle between add and save buttons
+        // Function to toggle between Add and Save buttons
         function toggleFormButtons() {
             if (isEditing) {
                 addCardBtn.style.display = 'none';
@@ -960,186 +745,186 @@
             } else {
                 addCardBtn.style.display = 'block';
                 saveEditBtn.style.display = 'none';
-                // Clear the form fields when not editing
-                questionInput.value = '';
-                answerInput.value = '';
+                cardForm.reset();
             }
         }
         
-        // Function to shuffle the flashcard array
-        function shuffleDeck() {
-            if (flashcards.length <= 1) return;
-            
-            isEditing = false;
-            toggleFormButtons();
-
-            // Fisher-Yates shuffle algorithm
+        // Function to shuffle the flashcards
+        function shuffleCards() {
             for (let i = flashcards.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [flashcards[i], flashcards[j]] = [flashcards[j], flashcards[i]];
             }
-            
-            // Reset index to the first card after shuffling
             currentCardIndex = 0;
-
-            if (isFlipped) {
-                flashcardElement.classList.remove('is-flipped');
-                isFlipped = false;
-                setTimeout(updateUI, 400);
-            } else {
-                updateUI();
-            }
-            showMessage('Flashcards shuffled!', 'success', 'form');
-        }
-        
-        // AI-powered features
-        async function generateAnswer() {
-            if (!questionInput.value) {
-                showMessage('Please enter a question first.', 'error', 'form');
-                return;
-            }
-            
-            generateAnswerBtn.disabled = true;
-            generateAnswerBtn.textContent = 'Generating...';
-            try {
-                const prompt = `Provide a concise answer to the following question: "${questionInput.value}". The answer should be suitable for a flashcard, meaning it is brief and to the point.`;
-                const answer = await fetchGeminiResponse(prompt);
-                answerInput.value = answer;
-                showMessage('Answer generated!', 'success', 'form');
-            } catch (e) {
-                console.error("Error generating answer:", e);
-                showMessage('Error generating answer. Please try again.', 'error', 'form');
-            } finally {
-                generateAnswerBtn.disabled = false;
-                generateAnswerBtn.textContent = '✨ Generate Answer';
-            }
-        }
-        
-        async function generateDeck() {
-            if (!topicInput.value) {
-                showMessage('Please enter a topic first.', 'error', 'ai');
-                return;
-            }
-            
-            generateDeckBtn.disabled = true;
-            generateDeckBtn.textContent = 'Generating Deck...';
-            
-            try {
-                const prompt = `Generate 5 flashcards about "${topicInput.value}". Provide the output as a JSON array of objects, where each object has a 'question' key and an 'answer' key. Example: [{ "question": "Question 1", "answer": "Answer 1" }, { "question": "Question 2", "answer": "Answer 2" }]`;
-                const schema = {
-                    type: "ARRAY",
-                    items: {
-                        type: "OBJECT",
-                        properties: {
-                            "question": { "type": "STRING" },
-                            "answer": { "type": "STRING" }
-                        },
-                        "propertyOrdering": ["question", "answer"]
-                    }
-                };
-                const jsonResponse = await fetchGeminiResponse(prompt, schema);
-                const newCards = JSON.parse(jsonResponse);
-                
-                flashcards.push(...newCards);
-                
-                topicInput.value = '';
-                currentCardIndex = flashcards.length > 0 ? flashcards.length - 1 : 0;
-                updateUI();
-                saveFileToDrive();
-                switchView('flashcard');
-                showMessage('Deck generated and added!', 'success', 'ai');
-            } catch (e) {
-                console.error("Error generating deck:", e);
-                showMessage('Error generating deck. Please try again.', 'error', 'ai');
-            } finally {
-                generateDeckBtn.disabled = false;
-                generateDeckBtn.textContent = 'Generate Deck of Cards';
-            }
-        }
-        
-        async function explainCardContent() {
-            if (flashcards.length === 0) return;
-            explainBtn.disabled = true;
-            
-            try {
-                const currentCard = flashcards[currentCardIndex];
-                explanationTitle.textContent = `Explanation for: ${currentCard.question}`;
-                explanationContent.innerHTML = '<div class="loading-spinner"></div>';
-                explanationModal.style.display = 'flex';
-                
-                const prompt = `Provide a detailed but easy-to-understand explanation for the following flashcard question and answer pair. Question: "${currentCard.question}". Answer: "${currentCard.answer}". Use markdown formatting, including bolding and lists, to make it easy to read.`;
-                const explanation = await fetchGeminiResponse(prompt);
-                
-                const formattedExplanation = explanation.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                                        .replace(/\n\n/g, '<p>')
-                                                        .replace(/\n/g, '<br>');
-                explanationContent.innerHTML = formattedExplanation;
-
-            } catch (e) {
-                console.error("Error generating explanation:", e);
-                explanationContent.textContent = 'Sorry, an error occurred while generating the explanation. Please try again.';
-            } finally {
-                explainBtn.disabled = false;
-            }
-        }
-        
-        function closeModal() {
-            explanationModal.style.display = 'none';
-        }
-
-        function loadInitialCards(doSave = true) {
-            flashcards = [
-                { question: "What is the capital of France?", answer: "Paris" },
-                { question: "What is the powerhouse of the cell?", answer: "Mitochondria" },
-                { question: "What is the largest planet in our solar system?", answer: "Jupiter" }
-            ];
             updateUI();
-            if (doSave) saveFileToDrive();
+            showMessage('Cards shuffled!', 'success', 'form');
         }
 
-        // Event listeners for the tab buttons
-        viewCardsTab.addEventListener('click', () => {
-            isEditing = false;
-            toggleFormButtons();
-            switchView('flashcard');
-        });
-        
-        manageCardsTab.addEventListener('click', () => {
-            isEditing = false;
-            toggleFormButtons();
-            switchView('form');
-        });
+        // Function to handle the form submission for adding a new card
+        function addCard(event) {
+            event.preventDefault();
+            const newQuestion = questionInput.value.trim();
+            const newAnswer = answerInput.value.trim();
+            if (newQuestion && newAnswer) {
+                flashcards.push({ question: newQuestion, answer: newAnswer });
+                cardForm.reset();
+                updateUI();
+                showMessage('Flashcard added successfully!');
+            } else {
+                showMessage('Please fill in both fields.', 'error');
+            }
+        }
 
-        // Event listeners for the navigation and action buttons
+        // Function to handle editing a card
+        function editCard() {
+            if (flashcards.length === 0) return;
+            const currentCard = flashcards[currentCardIndex];
+            questionInput.value = currentCard.question;
+            answerInput.value = currentCard.answer;
+            isEditing = true;
+            toggleFormButtons();
+            switchView('manage-cards');
+        }
+        
+        // Function to save the edited card
+        function saveEdit() {
+            const newQuestion = questionInput.value.trim();
+            const newAnswer = answerInput.value.trim();
+            if (newQuestion && newAnswer) {
+                flashcards[currentCardIndex].question = newQuestion;
+                flashcards[currentCardIndex].answer = newAnswer;
+                isEditing = false;
+                toggleFormButtons();
+                updateUI();
+                switchView('flashcard');
+                showMessage('Flashcard changes saved!', 'success');
+            } else {
+                showMessage('Please fill in both fields.', 'error');
+            }
+        }
+        
+        // Function to open the modal with an explanation
+        async function explainCard() {
+            if (!flashcards.length) return;
+            const currentCard = flashcards[currentCardIndex];
+            
+            explanationTitle.textContent = "Loading explanation...";
+            explanationContent.textContent = "";
+            explanationModal.style.display = 'flex';
+            
+            const prompt = `Please provide a simple, concise explanation for the following flashcard's answer.
+            Question: "${currentCard.question}"
+            Answer: "${currentCard.answer}"`;
+            
+            try {
+                const explanation = await fetchGeminiResponse(prompt);
+                explanationTitle.textContent = `Explanation for "${currentCard.question}"`;
+                explanationContent.textContent = explanation;
+            } catch (error) {
+                explanationTitle.textContent = `Error`;
+                explanationContent.textContent = 'Failed to generate an explanation. Please try again.';
+            }
+        }
+        
+        // Function to generate a flashcard answer
+        async function generateAnswer() {
+            const question = questionInput.value.trim();
+            if (!question) {
+                showMessage("Please enter a question first.", "error", "form");
+                return;
+            }
+
+            generateAnswerBtn.textContent = 'Generating...';
+            generateAnswerBtn.disabled = true;
+
+            const prompt = `Generate a concise and accurate answer for the flashcard question: "${question}"`;
+            
+            try {
+                const answer = await fetchGeminiResponse(prompt);
+                answerInput.value = answer.trim();
+            } catch (error) {
+                showMessage("Failed to generate answer. Please try again.", "error", "form");
+            } finally {
+                generateAnswerBtn.textContent = '✨ Generate Answer';
+                generateAnswerBtn.disabled = false;
+            }
+        }
+        
+        // Function to generate a deck of cards based on a topic
+        async function generateDeck() {
+            const topic = topicInput.value.trim();
+            if (!topic) {
+                showMessage("Please enter a topic first.", "error", "ai");
+                return;
+            }
+            
+            generateDeckBtn.textContent = 'Generating...';
+            generateDeckBtn.disabled = true;
+            loadingSpinner.style.display = 'flex';
+            flashcardDisplay.style.display = 'none';
+
+            const prompt = `Generate a JSON array of 5 flashcards on the topic of '${topic}'. Each object in the array should have a 'question' and an 'answer' property.`;
+            
+            const schema = {
+                type: "ARRAY",
+                items: {
+                    type: "OBJECT",
+                    properties: {
+                        "question": { "type": "STRING" },
+                        "answer": { "type": "STRING" }
+                    },
+                    "propertyOrdering": ["question", "answer"]
+                }
+            };
+            
+            try {
+                const result = await fetchGeminiResponse(prompt, schema);
+                const newCards = JSON.parse(result);
+                flashcards = newCards;
+                currentCardIndex = 0;
+                updateUI();
+                switchView('flashcard');
+                showMessage(`Generated a deck of ${newCards.length} cards on "${topic}"!`, 'success', 'ai');
+            } catch (error) {
+                console.error("Error generating deck:", error);
+                showMessage("Failed to generate deck. Please try again.", "error", "ai");
+            } finally {
+                generateDeckBtn.textContent = 'Generate Deck of Cards';
+                generateDeckBtn.disabled = false;
+                loadingSpinner.style.display = 'none';
+                flashcardDisplay.style.display = 'block';
+            }
+        }
+        
+        // --- Event Listeners ---
+        flashcardElement.addEventListener('click', flipCard);
         flipBtn.addEventListener('click', flipCard);
         nextBtn.addEventListener('click', nextCard);
         prevBtn.addEventListener('click', prevCard);
+        shuffleBtn.addEventListener('click', shuffleCards);
         deleteBtn.addEventListener('click', deleteCard);
         editBtn.addEventListener('click', editCard);
-        shuffleBtn.addEventListener('click', shuffleDeck);
+        
         cardForm.addEventListener('submit', addCard);
-        saveEditBtn.addEventListener('click', saveEditedCard);
+        saveEditBtn.addEventListener('click', saveEdit);
         
-        // Event listeners for new Gemini API features
-        generateAnswerBtn.addEventListener('click', generateAnswer);
-        generateDeckBtn.addEventListener('click', generateDeck);
-        explainBtn.addEventListener('click', explainCardContent);
+        viewCardsTab.addEventListener('click', () => switchView('flashcard'));
+        manageCardsTab.addEventListener('click', () => switchView('manage-cards'));
         
-        closeModalBtn.addEventListener('click', closeModal);
+        explainBtn.addEventListener('click', explainCard);
+        closeModalBtn.addEventListener('click', () => explanationModal.style.display = 'none');
         window.addEventListener('click', (event) => {
-            if (event.target === explanationModal) {
-                closeModal();
+            if (event.target == explanationModal) {
+                explanationModal.style.display = 'none';
             }
         });
         
-        authorizeBtn.addEventListener('click', handleAuthClick);
-        
-        // Initial setup on page load
-        document.addEventListener('DOMContentLoaded', () => {
-            loadInitialCards(false);
-            // gisLoaded() is called by the script tag
-        });
+        generateAnswerBtn.addEventListener('click', generateAnswer);
+        generateDeckBtn.addEventListener('click', generateDeck);
+
+        // Initial setup
+        flashcards = loadInitialCards();
+        updateUI();
     </script>
-    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 </body>
 </html>
