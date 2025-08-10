@@ -125,18 +125,12 @@
         }
 
         /* Styling for the navigation controls */
-        .controls-nav {
+        .controls-nav, .controls-actions {
             display: flex;
             justify-content: space-between;
             align-items: center;
             gap: 10px;
-        }
-        
-        .controls-actions {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 10px;
+            flex-wrap: wrap; /* Allow buttons to wrap to new lines */
         }
 
         /* GOV.UK button base styling */
@@ -153,7 +147,7 @@
             font-size: 1em;
             line-height: 1.25;
             transition: background-color 0.3s;
-            white-space: nowrap;
+            /* Removed white-space: nowrap; to allow wrapping */
         }
         
         .btn:hover, .btn:focus {
@@ -201,6 +195,7 @@
         .btn-group {
             display: flex;
             gap: 10px;
+            flex-wrap: wrap;
         }
         
         #flip-btn {
@@ -305,8 +300,31 @@
         .message.error {
             color: #d4351c; /* GOV.UK error red */
         }
+        
+        .loading-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            min-height: 150px;
+        }
+        
+        .loading-spinner {
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #005ea5; /* GOV.UK blue */
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
 
-        /* Small screen adjustments */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Mobile-first adjustments for better responsiveness */
         @media (max-width: 600px) {
             .flashcard-container {
                 height: 250px;
@@ -320,6 +338,29 @@
                 padding: 10px 20px;
                 font-size: 0.9em;
             }
+            
+            .controls-nav {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .controls-actions {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .btn-group {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .btn-group .btn {
+                flex-grow: 1;
+            }
+            
+            #flip-btn {
+                width: 100%;
+            }
         }
     </style>
 </head>
@@ -329,40 +370,45 @@
         <!-- Tab buttons -->
         <div class="tabs">
             <button id="view-cards-tab" class="tab-btn active">View Cards</button>
-            <button id="manage-cards-tab" class="tab-btn">Manage Cards</button>
+            <button id="manage-cards-tab" class="tab-btn">Add cards</button>
         </div>
 
         <!-- Tab content for viewing flashcards -->
         <div id="flashcard-view" class="tab-content active">
-            <div class="flashcard-container">
-                <div id="flashcard" class="flashcard">
-                    <div id="flashcard-front" class="flashcard-face flashcard-front">
-                        Question
+            <div id="flashcard-display">
+                <div class="flashcard-container">
+                    <div id="flashcard" class="flashcard">
+                        <div id="flashcard-front" class="flashcard-face flashcard-front">
+                            Question
+                        </div>
+                        <div id="flashcard-back" class="flashcard-face flashcard-back">
+                            Answer
+                        </div>
                     </div>
-                    <div id="flashcard-back" class="flashcard-face flashcard-back">
-                        Answer
+                </div>
+                
+                <div class="controls-container">
+                    <div class="controls-nav">
+                        <div class="btn-group">
+                            <button id="prev-btn" class="btn btn-primary">Previous</button>
+                            <button id="next-btn" class="btn btn-primary">Next</button>
+                            <button id="shuffle-btn" class="btn btn-primary">Shuffle</button>
+                        </div>
+                        <button id="flip-btn" class="btn btn-primary">Flip</button>
+                    </div>
+
+                    <div class="controls-actions">
+                        <button id="delete-btn" class="btn btn-destructive">Delete</button>
+                        <button id="edit-btn" class="btn btn-secondary">Edit</button>
+                    </div>
+                    
+                    <div id="info-bar" class="info-bar">
+                        <div id="card-counter"></div>
                     </div>
                 </div>
             </div>
-            
-            <div class="controls-container">
-                <div class="controls-nav">
-                    <div class="btn-group">
-                        <button id="prev-btn" class="btn btn-primary">Previous</button>
-                        <button id="next-btn" class="btn btn-primary">Next</button>
-                        <button id="shuffle-btn" class="btn btn-primary">Shuffle</button>
-                    </div>
-                    <button id="flip-btn" class="btn btn-primary">Flip</button>
-                </div>
-
-                <div class="controls-actions">
-                    <button id="delete-btn" class="btn btn-destructive">Delete</button>
-                    <button id="edit-btn" class="btn btn-secondary">Edit</button>
-                </div>
-                
-                <div id="info-bar" class="info-bar">
-                    <div id="card-counter"></div>
-                </div>
+            <div id="loading-spinner" class="loading-container" style="display: none;">
+                <div class="loading-spinner"></div>
             </div>
         </div>
 
@@ -377,28 +423,37 @@
             </form>
         </div>
     </div>
+    
+    <div id="user-info" class="info-bar" style="margin-top: 20px;">
+        <div id="user-id-display"></div>
+    </div>
 
-    <script>
-        // An array to hold our flashcard data
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, collection, query, where, addDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global variables for Firebase configuration and app ID
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : '';
+        
+        let db;
+        let auth;
+        let userId;
         let flashcards = [];
         let currentCardIndex = 0;
         let isFlipped = false;
         let isEditing = false;
-
-        // Default flashcards to use if none are saved
-        const defaultFlashcards = [
-            { question: "What is the capital of France?", answer: "Paris" },
-            { question: "Who wrote 'Romeo and Juliet'?", answer: "William Shakespeare" },
-            { question: "What is the chemical symbol for water?", answer: "H2O" },
-            { question: "What is the largest planet in our solar system?", answer: "Jupiter" },
-            { question: "What is the square root of 64?", answer: "8" }
-        ];
+        let unsubscribe = null; // To store the onSnapshot listener
 
         // Get references to the HTML elements
         const flashcardView = document.getElementById('flashcard-view');
+        const flashcardDisplay = document.getElementById('flashcard-display');
         const manageCardsView = document.getElementById('manage-cards-view');
         const viewCardsTab = document.getElementById('view-cards-tab');
         const manageCardsTab = document.getElementById('manage-cards-tab');
+        const loadingSpinner = document.getElementById('loading-spinner');
 
         const flashcardElement = document.getElementById('flashcard');
         const frontElement = document.getElementById('flashcard-front');
@@ -417,6 +472,7 @@
         const addCardBtn = document.getElementById('add-card-btn');
         const saveEditBtn = document.getElementById('save-edit-btn');
         const messageElement = document.getElementById('message');
+        const userIdDisplay = document.getElementById('user-id-display');
 
         // Function to switch between the two views
         function switchView(view) {
@@ -431,34 +487,6 @@
                 flashcardView.classList.remove('active');
                 manageCardsView.classList.add('active');
             }
-        }
-        
-        // Function to save the flashcards array to local storage
-        function saveFlashcards() {
-            try {
-                localStorage.setItem('flashcards', JSON.stringify(flashcards));
-            } catch (e) {
-                console.error("Could not save flashcards to local storage:", e);
-                showMessage('Error saving flashcards!', 'error');
-            }
-        }
-
-        // Function to load flashcards from local storage, or use defaults
-        function loadFlashcards() {
-            try {
-                const savedCards = localStorage.getItem('flashcards');
-                if (savedCards) {
-                    const parsedCards = JSON.parse(savedCards);
-                    if (Array.isArray(parsedCards) && parsedCards.length > 0) {
-                        flashcards = parsedCards;
-                        return;
-                    }
-                }
-            } catch (e) {
-                console.error("Failed to load or parse flashcards from local storage:", e);
-            }
-            // Use default cards if loading fails or no data is found
-            flashcards = defaultFlashcards;
         }
         
         // Function to show a message to the user
@@ -491,6 +519,10 @@
             deleteBtn.disabled = !hasCards;
             editBtn.disabled = !hasCards;
             shuffleBtn.disabled = !hasCards;
+            
+            // Hide spinner and show content
+            loadingSpinner.style.display = 'none';
+            flashcardDisplay.style.display = 'block';
         }
 
         // Function to handle the flip action
@@ -535,52 +567,46 @@
         }
         
         // Function to delete the current card
-        function deleteCard() {
-            if (flashcards.length > 0) {
-                // Remove the current card from the array
-                flashcards.splice(currentCardIndex, 1);
-                
-                // Adjust index if we deleted the last card
-                if (flashcards.length > 0) {
-                    currentCardIndex = Math.min(currentCardIndex, flashcards.length - 1);
-                } else {
-                    currentCardIndex = 0;
-                }
-
-                // Save the changes and update the UI
-                saveFlashcards();
-                isEditing = false;
-                toggleFormButtons();
-                updateUI();
+        async function deleteCard() {
+            if (!db || !userId || flashcards.length === 0) return;
+            try {
+                // Get the ID of the current card to delete
+                const cardToDelete = flashcards[currentCardIndex];
+                await deleteDoc(doc(db, `/artifacts/${appId}/public/data/flashcards/${cardToDelete.id}`));
                 showMessage('Flashcard deleted!', 'error');
+            } catch (e) {
+                console.error("Error deleting flashcard:", e);
+                showMessage('Error deleting flashcard!', 'error');
             }
         }
         
         // Function to handle adding a new flashcard
-        function addCard(e) {
+        async function addCard(e) {
             e.preventDefault(); 
+            if (!db || !userId) return;
+
             const newQuestion = questionInput.value;
             const newAnswer = answerInput.value;
             
-            // Add the new flashcard to the array
-            flashcards.push({ question: newQuestion, answer: newAnswer });
+            try {
+                await addDoc(collection(db, `/artifacts/${appId}/public/data/flashcards`), {
+                    question: newQuestion,
+                    answer: newAnswer,
+                    userId: userId,
+                    createdAt: new Date()
+                });
 
-            // Clear the form inputs and show the new card
-            questionInput.value = '';
-            answerInput.value = '';
-            currentCardIndex = flashcards.length - 1;
+                // Clear the form inputs
+                questionInput.value = '';
+                answerInput.value = '';
 
-            // Save the changes and update the UI
-            saveFlashcards();
-            switchView('flashcard');
-            if (isFlipped) {
-                flashcardElement.classList.remove('is-flipped');
-                isFlipped = false;
-                setTimeout(updateUI, 400);
-            } else {
-                updateUI();
+                // Switch back to view cards
+                switchView('flashcard');
+                showMessage('Flashcard added successfully!', 'success');
+            } catch (e) {
+                console.error("Error adding flashcard:", e);
+                showMessage('Error adding flashcard!', 'error');
             }
-            showMessage('Flashcard added successfully!', 'success');
         }
 
         // Function to handle editing a flashcard
@@ -597,18 +623,26 @@
         }
 
         // Function to save the edited card
-        function saveEditedCard() {
-            if (flashcards.length === 0) return;
-            flashcards[currentCardIndex].question = questionInput.value;
-            flashcards[currentCardIndex].answer = answerInput.value;
+        async function saveEditedCard() {
+            if (!db || !userId || flashcards.length === 0) return;
+            const cardToUpdate = flashcards[currentCardIndex];
             
-            // Save changes and update UI
-            saveFlashcards();
-            isEditing = false;
-            toggleFormButtons();
-            updateUI();
-            switchView('flashcard');
-            showMessage('Changes saved!', 'success');
+            try {
+                await setDoc(doc(db, `/artifacts/${appId}/public/data/flashcards/${cardToUpdate.id}`), {
+                    question: questionInput.value,
+                    answer: answerInput.value,
+                    userId: userId
+                }, { merge: true });
+
+                // Clear the form fields and switch back to view cards
+                isEditing = false;
+                toggleFormButtons();
+                switchView('flashcard');
+                showMessage('Changes saved!', 'success');
+            } catch (e) {
+                console.error("Error saving flashcard:", e);
+                showMessage('Error saving flashcard!', 'error');
+            }
         }
         
         // Function to toggle between add and save buttons
@@ -641,8 +675,6 @@
             // Reset index to the first card after shuffling
             currentCardIndex = 0;
 
-            // Save the new order and update the UI
-            saveFlashcards();
             if (isFlipped) {
                 flashcardElement.classList.remove('is-flipped');
                 isFlipped = false;
@@ -651,6 +683,67 @@
                 updateUI();
             }
             showMessage('Flashcards shuffled!', 'success');
+        }
+
+        // Main function to initialize Firebase and load data
+        async function init() {
+            // Display loading spinner
+            flashcardDisplay.style.display = 'none';
+            loadingSpinner.style.display = 'flex';
+            
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                    userIdDisplay.textContent = `User ID: ${userId}`;
+                    if (unsubscribe) {
+                        unsubscribe(); // Unsubscribe from previous listener
+                    }
+                    await setupFlashcardListener();
+                } else {
+                    // Sign in with the provided custom token
+                    try {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } catch (error) {
+                        console.error("Authentication failed:", error);
+                        alert("Authentication failed. Please check your token.");
+                    }
+                }
+            });
+        }
+        
+        // Setup real-time listener for flashcards from Firestore
+        function setupFlashcardListener() {
+            if (!db || !userId) return;
+            const q = query(collection(db, `/artifacts/${appId}/public/data/flashcards`));
+            
+            unsubscribe = onSnapshot(q, (querySnapshot) => {
+                flashcards = [];
+                querySnapshot.forEach((doc) => {
+                    flashcards.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // Sort the cards by creation date (if available)
+                flashcards.sort((a, b) => a.createdAt - b.createdAt);
+
+                // Adjust the current index if the list of cards changed
+                if (currentCardIndex >= flashcards.length && flashcards.length > 0) {
+                    currentCardIndex = flashcards.length - 1;
+                } else if (flashcards.length === 0) {
+                    currentCardIndex = 0;
+                }
+
+                updateUI();
+            }, (error) => {
+                console.error("Error getting flashcards:", error);
+                showMessage('Error loading flashcards!', 'error');
+                // Hide spinner even on error
+                loadingSpinner.style.display = 'none';
+                flashcardDisplay.style.display = 'block';
+            });
         }
 
         // Event listeners for the tab buttons
@@ -669,7 +762,7 @@
         // Event listeners for the navigation and action buttons
         flipBtn.addEventListener('click', flipCard);
         nextBtn.addEventListener('click', nextCard);
-        prevBtn.addEventListener('click', prevCard);
+            prevBtn.addEventListener('click', prevCard);
         deleteBtn.addEventListener('click', deleteCard);
         editBtn.addEventListener('click', editCard);
         shuffleBtn.addEventListener('click', shuffleDeck);
@@ -677,8 +770,7 @@
         saveEditBtn.addEventListener('click', saveEditedCard);
 
         // Initial setup on page load
-        loadFlashcards();
-        updateUI();
+        init();
     </script>
 </body>
 </html>
