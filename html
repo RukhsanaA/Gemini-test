@@ -58,6 +58,8 @@
             box-sizing: border-box;
             border-radius: 15px;
             color: #333;
+            word-wrap: break-word; /* Allow long words to break */
+            overflow: auto; /* Add scrollbars if content is too long */
         }
 
         .flashcard-front {
@@ -69,14 +71,16 @@
             transform: rotateY(180deg);
         }
 
-        /* Styling for the buttons */
+        /* Styling for the navigation controls */
         .controls {
             display: flex;
-            justify-content: center;
+            justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
             gap: 15px;
             width: 100%;
             max-width: 500px;
+            margin-bottom: 20px;
         }
 
         .btn {
@@ -100,16 +104,83 @@
         .btn-flip {
             background-color: #007bff;
             color: white;
+            flex-grow: 1; /* Allow the flip button to expand */
         }
 
         .btn-prev, .btn-next {
             background-color: #6c757d;
             color: white;
         }
+        
+        .btn-delete {
+            background-color: #dc3545;
+            color: white;
+        }
 
         .btn:disabled {
             background-color: #ccc;
             cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Styling for the card counter */
+        .card-counter {
+            font-size: 1em;
+            color: #555;
+            text-align: center;
+            flex-basis: 100%; /* Take up a full row */
+            margin-top: 10px;
+        }
+        
+        /* Styling for the form to add new flashcards */
+        .add-card-form {
+            width: 90%;
+            max-width: 500px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 20px;
+            border-radius: 15px;
+            background-color: #ffffff;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .add-card-form input,
+        .add-card-form button {
+            padding: 10px;
+            font-size: 1em;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+        
+        .add-card-form input:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+
+        .add-card-form button {
+            background-color: #28a745;
+            color: white;
+            cursor: pointer;
+            border: none;
+        }
+
+        .add-card-form button:hover {
+            background-color: #218838;
+        }
+
+        .message {
+            margin-top: 10px;
+            font-size: 0.9em;
+            text-align: center;
+        }
+
+        .message.success {
+            color: #28a745;
+        }
+
+        .message.error {
+            color: #dc3545;
         }
 
         /* Small screen adjustments */
@@ -144,22 +215,34 @@
 
     <div class="controls">
         <button id="prev-btn" class="btn btn-prev">Previous</button>
+        <button id="delete-btn" class="btn btn-delete">Delete</button>
         <button id="flip-btn" class="btn btn-flip">Flip</button>
         <button id="next-btn" class="btn btn-next">Next</button>
+        <div id="card-counter" class="card-counter"></div>
     </div>
 
+    <!-- Form to add new flashcards -->
+    <form id="add-card-form" class="add-card-form">
+        <input type="text" id="question-input" placeholder="Enter Question" required>
+        <input type="text" id="answer-input" placeholder="Enter Answer" required>
+        <button type="submit" class="btn">Add Flashcard</button>
+        <div id="message" class="message"></div>
+    </form>
+
     <script>
-        // An array of flashcards, each with a question and an answer.
-        const flashcards = [
+        // An array to hold our flashcard data
+        let flashcards = [];
+        let currentCardIndex = 0;
+        let isFlipped = false;
+
+        // Default flashcards to use if none are saved
+        const defaultFlashcards = [
             { question: "What is the capital of France?", answer: "Paris" },
             { question: "Who wrote 'Romeo and Juliet'?", answer: "William Shakespeare" },
             { question: "What is the chemical symbol for water?", answer: "H2O" },
             { question: "What is the largest planet in our solar system?", answer: "Jupiter" },
             { question: "What is the square root of 64?", answer: "8" }
         ];
-
-        let currentCardIndex = 0;
-        let isFlipped = false;
 
         // Get references to the HTML elements
         const flashcardElement = document.getElementById('flashcard');
@@ -168,12 +251,70 @@
         const flipBtn = document.getElementById('flip-btn');
         const prevBtn = document.getElementById('prev-btn');
         const nextBtn = document.getElementById('next-btn');
+        const deleteBtn = document.getElementById('delete-btn');
+        const cardCounterElement = document.getElementById('card-counter');
 
-        // Function to update the flashcard content based on the current index
-        function updateCardContent() {
-            const currentCard = flashcards[currentCardIndex];
-            frontElement.textContent = currentCard.question;
-            backElement.textContent = currentCard.answer;
+        const addCardForm = document.getElementById('add-card-form');
+        const questionInput = document.getElementById('question-input');
+        const answerInput = document.getElementById('answer-input');
+        const messageElement = document.getElementById('message');
+
+        // Function to save the flashcards array to local storage
+        function saveFlashcards() {
+            try {
+                localStorage.setItem('flashcards', JSON.stringify(flashcards));
+            } catch (e) {
+                console.error("Could not save flashcards to local storage:", e);
+                showMessage('Error saving flashcards!', 'error');
+            }
+        }
+
+        // Function to load flashcards from local storage, or use defaults
+        function loadFlashcards() {
+            try {
+                const savedCards = localStorage.getItem('flashcards');
+                if (savedCards) {
+                    const parsedCards = JSON.parse(savedCards);
+                    if (Array.isArray(parsedCards) && parsedCards.length > 0) {
+                        flashcards = parsedCards;
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load or parse flashcards from local storage:", e);
+            }
+            // Use default cards if loading fails or no data is found
+            flashcards = defaultFlashcards;
+        }
+        
+        // Function to show a message to the user
+        function showMessage(text, type = 'success') {
+            messageElement.textContent = text;
+            messageElement.className = `message ${type}`;
+            setTimeout(() => {
+                messageElement.textContent = '';
+                messageElement.className = 'message';
+            }, 3000);
+        }
+
+        // Function to update the card content, counter, and button states
+        function updateUI() {
+            const hasCards = flashcards.length > 0;
+            if (hasCards) {
+                const currentCard = flashcards[currentCardIndex];
+                frontElement.textContent = currentCard.question;
+                backElement.textContent = currentCard.answer;
+                cardCounterElement.textContent = `Card ${currentCardIndex + 1} of ${flashcards.length}`;
+            } else {
+                frontElement.textContent = 'No cards available. Add a new one!';
+                backElement.textContent = 'No cards available.';
+                cardCounterElement.textContent = '0 cards';
+            }
+            // Disable buttons if there are no cards
+            flipBtn.disabled = !hasCards;
+            prevBtn.disabled = !hasCards;
+            nextBtn.disabled = !hasCards;
+            deleteBtn.disabled = !hasCards;
         }
 
         // Function to handle the flip action
@@ -188,37 +329,85 @@
 
         // Function to move to the next card
         function nextCard() {
+            if (flashcards.length === 0) return;
             currentCardIndex = (currentCardIndex + 1) % flashcards.length;
             if (isFlipped) {
-                // Unflip the card before changing content for a smooth transition
                 flashcardElement.classList.remove('is-flipped');
                 isFlipped = false;
-                setTimeout(updateCardContent, 400); // Wait for the unflip animation to finish
+                setTimeout(updateUI, 400); 
             } else {
-                updateCardContent();
+                updateUI();
             }
         }
 
         // Function to move to the previous card
         function prevCard() {
+            if (flashcards.length === 0) return;
             currentCardIndex = (currentCardIndex - 1 + flashcards.length) % flashcards.length;
             if (isFlipped) {
-                // Unflip the card before changing content for a smooth transition
                 flashcardElement.classList.remove('is-flipped');
                 isFlipped = false;
-                setTimeout(updateCardContent, 400); // Wait for the unflip animation to finish
+                setTimeout(updateUI, 400);
             } else {
-                updateCardContent();
+                updateUI();
+            }
+        }
+        
+        // Function to delete the current card
+        function deleteCard() {
+            if (flashcards.length > 0) {
+                // Remove the current card from the array
+                flashcards.splice(currentCardIndex, 1);
+                
+                // Adjust index if we deleted the last card
+                if (currentCardIndex >= flashcards.length && flashcards.length > 0) {
+                    currentCardIndex = flashcards.length - 1;
+                } else if (flashcards.length === 0) {
+                    currentCardIndex = 0;
+                }
+
+                // Save the changes and update the UI
+                saveFlashcards();
+                updateUI();
+                showMessage('Flashcard deleted!', 'error');
             }
         }
 
-        // Event listeners for the buttons
+        // Function to handle adding a new flashcard
+        addCardForm.addEventListener('submit', (e) => {
+            e.preventDefault(); 
+            const newQuestion = questionInput.value;
+            const newAnswer = answerInput.value;
+            
+            // Add the new flashcard to the array
+            flashcards.push({ question: newQuestion, answer: newAnswer });
+
+            // Clear the form inputs and show the new card
+            questionInput.value = '';
+            answerInput.value = '';
+            currentCardIndex = flashcards.length - 1;
+
+            // Save the changes and update the UI
+            saveFlashcards();
+            if (isFlipped) {
+                flashcardElement.classList.remove('is-flipped');
+                isFlipped = false;
+                setTimeout(updateUI, 400);
+            } else {
+                updateUI();
+            }
+            showMessage('Flashcard added successfully!', 'success');
+        });
+
+        // Event listeners for the navigation buttons
         flipBtn.addEventListener('click', flipCard);
         nextBtn.addEventListener('click', nextCard);
         prevBtn.addEventListener('click', prevCard);
+        deleteBtn.addEventListener('click', deleteCard);
 
-        // Initial setup
-        updateCardContent();
+        // Initial setup on page load
+        loadFlashcards();
+        updateUI();
     </script>
 </body>
 </html>
