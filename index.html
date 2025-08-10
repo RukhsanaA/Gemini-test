@@ -8,7 +8,6 @@
     <style>
         /* General styling for the body and container */
         body {
-            /* Apply the font stack and background color from the GOV.UK Design System */
             font-family: "GDS Transport", Arial, sans-serif;
             display: flex;
             justify-content: center;
@@ -80,8 +79,8 @@
             text-align: center;
             transition: transform 0.8s;
             transform-style: preserve-3d;
-            border-radius: 4px; /* Minimal border-radius for a cleaner look */
-            box-shadow: 0 2px 0 #92979a; /* Simple shadow inspired by GOV.UK buttons */
+            border-radius: 4px;
+            box-shadow: 0 2px 0 #92979a;
         }
 
         /* The flip effect */
@@ -102,20 +101,20 @@
             padding: 20px;
             box-sizing: border-box;
             border-radius: 4px;
-            color: #0b0c0c; /* GOV.UK text color */
+            color: #0b0c0c;
             word-wrap: break-word;
             overflow: auto;
         }
 
         .flashcard-front {
             background-color: #ffffff;
-            border: 1px solid #bfc1c3; /* GOV.UK border color */
+            border: 1px solid #bfc1c3;
         }
 
         .flashcard-back {
-            background-color: #f8f8f8; /* A light, neutral back color */
+            background-color: #f8f8f8;
             transform: rotateY(180deg);
-            border: 1px solid #bfc1c3; /* GOV.UK border color */
+            border: 1px solid #bfc1c3;
         }
         
         .controls-container {
@@ -131,7 +130,7 @@
             justify-content: space-between;
             align-items: center;
             gap: 10px;
-            flex-wrap: wrap; /* Allow buttons to wrap to new lines */
+            flex-wrap: wrap;
         }
 
         /* GOV.UK button base styling */
@@ -148,16 +147,15 @@
             font-size: 1em;
             line-height: 1.25;
             transition: background-color 0.3s;
-            /* Removed white-space: nowrap; to allow wrapping */
         }
         
         .btn:hover, .btn:focus {
-            background-color: #003078; /* Darker blue for hover */
+            background-color: #003078;
         }
 
         /* Primary button style */
         .btn-primary {
-            background-color: #005ea5; /* GOV.UK blue */
+            background-color: #005ea5;
             color: #ffffff;
         }
 
@@ -170,19 +168,19 @@
         }
         
         .btn-secondary:hover, .btn-secondary:focus {
-            background-color: #6f777b; /* Darker gray for hover */
+            background-color: #6f777b;
             color: #ffffff;
         }
 
         /* Destructive button style */
         .btn-destructive {
-            background-color: #d4351c; /* GOV.UK red */
+            background-color: #d4351c;
             color: #ffffff;
             box-shadow: 0 2px 0 #7e2418;
         }
         
         .btn-destructive:hover, .btn-destructive:focus {
-            background-color: #9d2215; /* Darker red for hover */
+            background-color: #9d2215;
         }
 
         .btn:disabled {
@@ -203,7 +201,6 @@
             flex-grow: 1;
         }
         
-        /* Apply the new button styles */
         #add-card-btn {
             background-color: #005ea5;
             color: white;
@@ -234,80 +231,61 @@
             color: #555;
         }
 
-        /* Styling for the form to add/edit new flashcards */
-        .card-form {
-            width: 100%;
+        /* --- NEW LAYOUT STYLES FOR MANAGE CARDS VIEW --- */
+        .manage-cards-container {
+            display: grid;
+            gap: 20px;
+            padding: 20px;
+            background-color: #ffffff;
+            border: 1px solid #bfc1c3;
+            box-shadow: 0 2px 0 #92979a;
+            border-radius: 4px;
+        }
+
+        .card-form, .ai-generate-section {
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            padding: 20px;
-            border-radius: 4px;
-            background-color: #ffffff;
-            box-shadow: 0 2px 0 #92979a;
-            border: 1px solid #bfc1c3;
+            gap: 15px; /* Increased gap for better spacing */
+        }
+        
+        .section-divider {
+            border: none;
+            height: 1px;
+            background-color: #b1b4b6; /* GOV.UK neutral gray */
+            margin: 0;
         }
 
-        .card-form h3 {
-            margin: 0 0 15px 0; /* Added bottom margin for spacing */
+        .card-form h3, .ai-generate-section h3 {
+            margin: 0; /* Removed margin to let the container gap handle spacing */
+            font-size: 1.25em;
+            color: #0b0c0c;
         }
-
-        .card-form input {
+        
+        .card-form input, .ai-generate-section input {
             padding: 10px;
             font-size: 1em;
             border-radius: 0;
             border: 2px solid #0b0c0c;
-            width: 100%; /* Ensure inputs take full width */
+            width: 100%;
+            box-sizing: border-box; /* Ensures padding doesn't affect width */
         }
         
-        .card-form input:focus {
-            outline: 3px solid #ffdd00; /* GOV.UK focus color */
+        .card-form input:focus, .ai-generate-section input:focus {
+            outline: 3px solid #ffdd00;
             outline-offset: 0;
             border-color: #0b0c0c;
         }
 
-        .card-form button {
-            padding: 12px 24px;
-            font-size: 1em;
-            border-radius: 0;
-            border: none;
-            cursor: pointer;
-            transition: background-color 0.3s;
-            color: white;
-            font-weight: bold;
-        }
-        
-        #add-card-btn {
-            background-color: #005ea5;
-        }
-        
-        #add-card-btn:hover {
-            background-color: #003078;
-        }
-        
-        #save-edit-btn {
-            background-color: #6f777b;
-            color: #ffffff;
-        }
-        
-        #save-edit-btn:hover {
-            background-color: #505a5f;
-        }
-        
-        .ai-generate-section {
+        .form-buttons, .ai-buttons {
             display: flex;
-            flex-direction: column;
+            flex-direction: column; /* Stack buttons vertically for better mobile layout */
             gap: 10px;
-            padding: 20px;
-            border-radius: 4px;
-            background-color: #ffffff;
-            box-shadow: 0 2px 0 #92979a;
-            border: 1px solid #bfc1c3;
-            margin-top: 20px; /* Added top margin for separation */
         }
-        
-        .ai-generate-section h3 {
-            margin: 0 0 15px 0; /* Added bottom margin for spacing */
+
+        .form-buttons button, .ai-buttons button {
+            width: 100%; /* Make buttons full width */
         }
+        /* --- END OF NEW LAYOUT STYLES --- */
 
         .message {
             margin-top: 10px;
@@ -316,11 +294,11 @@
         }
 
         .message.success {
-            color: #00703c; /* GOV.UK success green */
+            color: #00703c;
         }
 
         .message.error {
-            color: #d4351c; /* GOV.UK error red */
+            color: #d4351c;
         }
         
         .loading-container {
@@ -333,8 +311,8 @@
         }
         
         .loading-spinner {
-            border: 4px solid #f3f3f3; /* Light grey */
-            border-top: 4px solid #005ea5; /* GOV.UK blue */
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #005ea5;
             border-radius: 50%;
             width: 40px;
             height: 40px;
@@ -422,14 +400,6 @@
             #flip-btn {
                 width: 100%;
             }
-            
-            /* New rule to ensure form buttons are full width on mobile */
-            .card-form #add-card-btn,
-            .card-form #save-edit-btn,
-            .ai-generate-section #generate-deck-btn,
-            .card-form #generate-answer-btn { /* Added this for consistency */
-                width: 100%;
-            }
         }
     </style>
 </head>
@@ -484,26 +454,31 @@
 
         <!-- Tab content for adding/editing flashcards -->
         <div id="manage-cards-view" class="tab-content">
-            <!-- Section for manual input -->
-            <form id="card-form" class="card-form">
-                <h3>Add a Card Manually</h3>
-                <input type="text" id="question-input" placeholder="Enter Question" required>
-                <!-- This div is now responsive -->
-                <input type="text" id="answer-input" placeholder="Enter Answer" required>
-                <button type="button" id="generate-answer-btn" class="btn btn-secondary">✨ Generate Answer</button>
-                <button type="submit" id="add-card-btn" class="btn btn-primary">Add Flashcard</button>
-                <button type="button" id="save-edit-btn" class="btn btn-secondary" style="display: none;">Save Changes</button>
-                <div id="message" class="message"></div>
-            </form>
-            
-            <hr style="margin: 20px 0;">
+            <div class="manage-cards-container">
+                <!-- Section for manual input -->
+                <form id="card-form" class="card-form">
+                    <h3>Add a Card Manually</h3>
+                    <input type="text" id="question-input" placeholder="Enter Question" required>
+                    <input type="text" id="answer-input" placeholder="Enter Answer" required>
+                    <div class="form-buttons">
+                        <button type="button" id="generate-answer-btn" class="btn btn-secondary">✨ Generate Answer</button>
+                        <button type="submit" id="add-card-btn" class="btn btn-primary">Add Flashcard</button>
+                        <button type="button" id="save-edit-btn" class="btn btn-secondary" style="display: none;">Save Changes</button>
+                    </div>
+                    <div id="message" class="message"></div>
+                </form>
+                
+                <hr class="section-divider">
 
-            <!-- Section for AI-powered generation -->
-            <div id="ai-generate-section" class="ai-generate-section">
-                <h3>✨ Generate a Deck</h3>
-                <input type="text" id="topic-input" placeholder="Enter a topic (e.g., 'solar system')" required>
-                <button type="button" id="generate-deck-btn" class="btn btn-primary">Generate Deck of Cards</button>
-                <div id="ai-message" class="message"></div>
+                <!-- Section for AI-powered generation -->
+                <div id="ai-generate-section" class="ai-generate-section">
+                    <h3>✨ Generate a Deck</h3>
+                    <input type="text" id="topic-input" placeholder="Enter a topic (e.g., 'solar system')" required>
+                    <div class="ai-buttons">
+                        <button type="button" id="generate-deck-btn" class="btn btn-primary">Generate Deck of Cards</button>
+                    </div>
+                    <div id="ai-message" class="message"></div>
+                </div>
             </div>
         </div>
     </div>
