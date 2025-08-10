@@ -7,22 +7,66 @@
     <style>
         /* General styling for the body and container */
         body {
-            font-family: 'Arial', sans-serif;
+            /* Apply the font stack and background color from the GOV.UK Design System */
+            font-family: "GDS Transport", Arial, sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
-            background-color: #f0f2f5;
+            background-color: #f3f2f1; /* GOV.UK light gray background */
             margin: 0;
             flex-direction: column;
             padding: 20px;
             box-sizing: border-box;
         }
 
-        .flashcard-container {
-            perspective: 1000px;
+        .container {
             width: 90%;
             max-width: 500px;
+        }
+
+        /* Tab navigation styling */
+        .tabs {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #0b0c0c;
+        }
+
+        .tab-btn {
+            flex-grow: 1;
+            text-align: center;
+            padding: 10px 15px;
+            cursor: pointer;
+            border: 1px solid #bfc1c3;
+            border-bottom: 0;
+            background-color: #fff;
+            color: #0b0c0c;
+            font-weight: 700;
+        }
+        
+        .tab-btn.active {
+            background-color: #005ea5;
+            color: #fff;
+            border-color: #005ea5;
+            z-index: 1;
+        }
+        
+        .tab-btn:hover:not(.active) {
+            background-color: #f3f2f1;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+
+        .flashcard-container {
+            perspective: 1000px;
+            width: 100%;
             height: 300px;
             margin-bottom: 20px;
         }
@@ -35,8 +79,8 @@
             text-align: center;
             transition: transform 0.8s;
             transform-style: preserve-3d;
-            border-radius: 15px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            border-radius: 4px; /* Minimal border-radius for a cleaner look */
+            box-shadow: 0 2px 0 #92979a; /* Simple shadow inspired by GOV.UK buttons */
         }
 
         /* The flip effect */
@@ -56,117 +100,196 @@
             font-size: 1.5em;
             padding: 20px;
             box-sizing: border-box;
-            border-radius: 15px;
-            color: #333;
-            word-wrap: break-word; /* Allow long words to break */
-            overflow: auto; /* Add scrollbars if content is too long */
+            border-radius: 4px;
+            color: #0b0c0c; /* GOV.UK text color */
+            word-wrap: break-word;
+            overflow: auto;
         }
 
         .flashcard-front {
             background-color: #ffffff;
+            border: 1px solid #bfc1c3; /* GOV.UK border color */
         }
 
         .flashcard-back {
-            background-color: #e0f7fa;
+            background-color: #f8f8f8; /* A light, neutral back color */
             transform: rotateY(180deg);
+            border: 1px solid #bfc1c3; /* GOV.UK border color */
+        }
+        
+        .controls-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
         }
 
         /* Styling for the navigation controls */
-        .controls {
+        .controls-nav {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-wrap: wrap;
-            gap: 15px;
-            width: 100%;
-            max-width: 500px;
-            margin-bottom: 20px;
-        }
-
-        .btn {
-            padding: 12px 24px;
-            font-size: 1em;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: background-color 0.3s, transform 0.2s;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-        }
-
-        .btn:active {
-            transform: translateY(0);
-        }
-
-        .btn-flip {
-            background-color: #007bff;
-            color: white;
-            flex-grow: 1; /* Allow the flip button to expand */
-        }
-
-        .btn-prev, .btn-next {
-            background-color: #6c757d;
-            color: white;
+            gap: 10px;
         }
         
-        .btn-delete {
-            background-color: #dc3545;
-            color: white;
+        .controls-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* GOV.UK button base styling */
+        .btn {
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+            border: 0;
+            border-radius: 0;
+            box-shadow: 0 2px 0 #0b0c0c;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            padding: 8px 15px 7px;
+            font-size: 1em;
+            line-height: 1.25;
+            transition: background-color 0.3s;
+            white-space: nowrap;
+        }
+        
+        .btn:hover, .btn:focus {
+            background-color: #003078; /* Darker blue for hover */
+        }
+
+        /* Primary button style */
+        .btn-primary {
+            background-color: #005ea5; /* GOV.UK blue */
+            color: #ffffff;
+        }
+
+        /* Secondary button style */
+        .btn-secondary {
+            background-color: #f3f2f1;
+            color: #0b0c0c;
+            border: 1px solid #0b0c0c;
+            box-shadow: 0 2px 0 #0b0c0c;
+        }
+        
+        .btn-secondary:hover, .btn-secondary:focus {
+            background-color: #6f777b; /* Darker gray for hover */
+            color: #ffffff;
+        }
+
+        /* Destructive button style */
+        .btn-destructive {
+            background-color: #d4351c; /* GOV.UK red */
+            color: #ffffff;
+            box-shadow: 0 2px 0 #7e2418;
+        }
+        
+        .btn-destructive:hover, .btn-destructive:focus {
+            background-color: #9d2215; /* Darker red for hover */
         }
 
         .btn:disabled {
-            background-color: #ccc;
+            background-color: #bfc1c3;
+            box-shadow: none;
             cursor: not-allowed;
+            color: #6f777b;
             transform: none;
         }
 
-        /* Styling for the card counter */
-        .card-counter {
-            font-size: 1em;
-            color: #555;
-            text-align: center;
-            flex-basis: 100%; /* Take up a full row */
-            margin-top: 10px;
+        .btn-group {
+            display: flex;
+            gap: 10px;
         }
         
-        /* Styling for the form to add new flashcards */
-        .add-card-form {
-            width: 90%;
-            max-width: 500px;
+        #flip-btn {
+            flex-grow: 1;
+        }
+        
+        /* Apply the new button styles */
+        #add-card-btn {
+            background-color: #005ea5;
+            color: white;
+            font-weight: bold;
+        }
+        
+        #add-card-btn:hover {
+            background-color: #003078;
+        }
+        
+        #save-edit-btn {
+            background-color: #6f777b;
+            color: #ffffff;
+        }
+        
+        #save-edit-btn:hover {
+            background-color: #505a5f;
+        }
+
+        /* Styling for the card counter and other info */
+        .info-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-basis: 100%; 
+            margin-top: 10px;
+            font-size: 1em;
+            color: #555;
+        }
+
+        /* Styling for the form to add/edit new flashcards */
+        .card-form {
+            width: 100%;
             display: flex;
             flex-direction: column;
             gap: 10px;
             padding: 20px;
-            border-radius: 15px;
+            border-radius: 4px;
             background-color: #ffffff;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 0 #92979a;
+            border: 1px solid #bfc1c3;
         }
 
-        .add-card-form input,
-        .add-card-form button {
+        .card-form input {
             padding: 10px;
             font-size: 1em;
-            border-radius: 8px;
-            border: 1px solid #ddd;
+            border-radius: 0;
+            border: 2px solid #0b0c0c;
         }
         
-        .add-card-form input:focus {
-            outline: none;
-            border-color: #007bff;
+        .card-form input:focus {
+            outline: 3px solid #ffdd00; /* GOV.UK focus color */
+            outline-offset: 0;
+            border-color: #0b0c0c;
         }
 
-        .add-card-form button {
-            background-color: #28a745;
-            color: white;
-            cursor: pointer;
+        .card-form button {
+            padding: 12px 24px;
+            font-size: 1em;
+            border-radius: 0;
             border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            color: white;
+            font-weight: bold;
         }
-
-        .add-card-form button:hover {
-            background-color: #218838;
+        
+        #add-card-btn {
+            background-color: #005ea5;
+        }
+        
+        #add-card-btn:hover {
+            background-color: #003078;
+        }
+        
+        #save-edit-btn {
+            background-color: #6f777b;
+            color: #ffffff;
+        }
+        
+        #save-edit-btn:hover {
+            background-color: #505a5f;
         }
 
         .message {
@@ -176,11 +299,11 @@
         }
 
         .message.success {
-            color: #28a745;
+            color: #00703c; /* GOV.UK success green */
         }
 
         .message.error {
-            color: #dc3545;
+            color: #d4351c; /* GOV.UK error red */
         }
 
         /* Small screen adjustments */
@@ -202,38 +325,65 @@
 </head>
 <body>
 
-    <div class="flashcard-container">
-        <div id="flashcard" class="flashcard">
-            <div id="flashcard-front" class="flashcard-face flashcard-front">
-                Question
+    <div class="container">
+        <!-- Tab buttons -->
+        <div class="tabs">
+            <button id="view-cards-tab" class="tab-btn active">View Cards</button>
+            <button id="manage-cards-tab" class="tab-btn">Manage Cards</button>
+        </div>
+
+        <!-- Tab content for viewing flashcards -->
+        <div id="flashcard-view" class="tab-content active">
+            <div class="flashcard-container">
+                <div id="flashcard" class="flashcard">
+                    <div id="flashcard-front" class="flashcard-face flashcard-front">
+                        Question
+                    </div>
+                    <div id="flashcard-back" class="flashcard-face flashcard-back">
+                        Answer
+                    </div>
+                </div>
             </div>
-            <div id="flashcard-back" class="flashcard-face flashcard-back">
-                Answer
+            
+            <div class="controls-container">
+                <div class="controls-nav">
+                    <div class="btn-group">
+                        <button id="prev-btn" class="btn btn-primary">Previous</button>
+                        <button id="next-btn" class="btn btn-primary">Next</button>
+                        <button id="shuffle-btn" class="btn btn-primary">Shuffle</button>
+                    </div>
+                    <button id="flip-btn" class="btn btn-primary">Flip</button>
+                </div>
+
+                <div class="controls-actions">
+                    <button id="delete-btn" class="btn btn-destructive">Delete</button>
+                    <button id="edit-btn" class="btn btn-secondary">Edit</button>
+                </div>
+                
+                <div id="info-bar" class="info-bar">
+                    <div id="card-counter"></div>
+                </div>
             </div>
         </div>
-    </div>
 
-    <div class="controls">
-        <button id="prev-btn" class="btn btn-prev">Previous</button>
-        <button id="delete-btn" class="btn btn-delete">Delete</button>
-        <button id="flip-btn" class="btn btn-flip">Flip</button>
-        <button id="next-btn" class="btn btn-next">Next</button>
-        <div id="card-counter" class="card-counter"></div>
+        <!-- Tab content for adding/editing flashcards -->
+        <div id="manage-cards-view" class="tab-content">
+            <form id="card-form" class="card-form">
+                <input type="text" id="question-input" placeholder="Enter Question" required>
+                <input type="text" id="answer-input" placeholder="Enter Answer" required>
+                <button type="submit" id="add-card-btn" class="btn btn-primary">Add Flashcard</button>
+                <button type="button" id="save-edit-btn" class="btn btn-secondary" style="display: none;">Save Changes</button>
+                <div id="message" class="message"></div>
+            </form>
+        </div>
     </div>
-
-    <!-- Form to add new flashcards -->
-    <form id="add-card-form" class="add-card-form">
-        <input type="text" id="question-input" placeholder="Enter Question" required>
-        <input type="text" id="answer-input" placeholder="Enter Answer" required>
-        <button type="submit" class="btn">Add Flashcard</button>
-        <div id="message" class="message"></div>
-    </form>
 
     <script>
         // An array to hold our flashcard data
         let flashcards = [];
         let currentCardIndex = 0;
         let isFlipped = false;
+        let isEditing = false;
 
         // Default flashcards to use if none are saved
         const defaultFlashcards = [
@@ -245,6 +395,11 @@
         ];
 
         // Get references to the HTML elements
+        const flashcardView = document.getElementById('flashcard-view');
+        const manageCardsView = document.getElementById('manage-cards-view');
+        const viewCardsTab = document.getElementById('view-cards-tab');
+        const manageCardsTab = document.getElementById('manage-cards-tab');
+
         const flashcardElement = document.getElementById('flashcard');
         const frontElement = document.getElementById('flashcard-front');
         const backElement = document.getElementById('flashcard-back');
@@ -252,13 +407,32 @@
         const prevBtn = document.getElementById('prev-btn');
         const nextBtn = document.getElementById('next-btn');
         const deleteBtn = document.getElementById('delete-btn');
+        const editBtn = document.getElementById('edit-btn');
+        const shuffleBtn = document.getElementById('shuffle-btn');
         const cardCounterElement = document.getElementById('card-counter');
 
-        const addCardForm = document.getElementById('add-card-form');
+        const cardForm = document.getElementById('card-form');
         const questionInput = document.getElementById('question-input');
         const answerInput = document.getElementById('answer-input');
+        const addCardBtn = document.getElementById('add-card-btn');
+        const saveEditBtn = document.getElementById('save-edit-btn');
         const messageElement = document.getElementById('message');
 
+        // Function to switch between the two views
+        function switchView(view) {
+            if (view === 'flashcard') {
+                viewCardsTab.classList.add('active');
+                manageCardsTab.classList.remove('active');
+                flashcardView.classList.add('active');
+                manageCardsView.classList.remove('active');
+            } else {
+                viewCardsTab.classList.remove('active');
+                manageCardsTab.classList.add('active');
+                flashcardView.classList.remove('active');
+                manageCardsView.classList.add('active');
+            }
+        }
+        
         // Function to save the flashcards array to local storage
         function saveFlashcards() {
             try {
@@ -315,10 +489,13 @@
             prevBtn.disabled = !hasCards;
             nextBtn.disabled = !hasCards;
             deleteBtn.disabled = !hasCards;
+            editBtn.disabled = !hasCards;
+            shuffleBtn.disabled = !hasCards;
         }
 
         // Function to handle the flip action
         function flipCard() {
+            if (!flashcards.length) return;
             isFlipped = !isFlipped;
             if (isFlipped) {
                 flashcardElement.classList.add('is-flipped');
@@ -330,6 +507,8 @@
         // Function to move to the next card
         function nextCard() {
             if (flashcards.length === 0) return;
+            isEditing = false;
+            toggleFormButtons();
             currentCardIndex = (currentCardIndex + 1) % flashcards.length;
             if (isFlipped) {
                 flashcardElement.classList.remove('is-flipped');
@@ -343,6 +522,8 @@
         // Function to move to the previous card
         function prevCard() {
             if (flashcards.length === 0) return;
+            isEditing = false;
+            toggleFormButtons();
             currentCardIndex = (currentCardIndex - 1 + flashcards.length) % flashcards.length;
             if (isFlipped) {
                 flashcardElement.classList.remove('is-flipped');
@@ -360,21 +541,23 @@
                 flashcards.splice(currentCardIndex, 1);
                 
                 // Adjust index if we deleted the last card
-                if (currentCardIndex >= flashcards.length && flashcards.length > 0) {
-                    currentCardIndex = flashcards.length - 1;
-                } else if (flashcards.length === 0) {
+                if (flashcards.length > 0) {
+                    currentCardIndex = Math.min(currentCardIndex, flashcards.length - 1);
+                } else {
                     currentCardIndex = 0;
                 }
 
                 // Save the changes and update the UI
                 saveFlashcards();
+                isEditing = false;
+                toggleFormButtons();
                 updateUI();
                 showMessage('Flashcard deleted!', 'error');
             }
         }
-
+        
         // Function to handle adding a new flashcard
-        addCardForm.addEventListener('submit', (e) => {
+        function addCard(e) {
             e.preventDefault(); 
             const newQuestion = questionInput.value;
             const newAnswer = answerInput.value;
@@ -389,6 +572,7 @@
 
             // Save the changes and update the UI
             saveFlashcards();
+            switchView('flashcard');
             if (isFlipped) {
                 flashcardElement.classList.remove('is-flipped');
                 isFlipped = false;
@@ -397,13 +581,100 @@
                 updateUI();
             }
             showMessage('Flashcard added successfully!', 'success');
+        }
+
+        // Function to handle editing a flashcard
+        function editCard() {
+            if (flashcards.length === 0) return;
+            isEditing = true;
+            toggleFormButtons();
+            
+            // Populate the form with the current card's content
+            questionInput.value = flashcards[currentCardIndex].question;
+            answerInput.value = flashcards[currentCardIndex].answer;
+            questionInput.focus();
+            switchView('form');
+        }
+
+        // Function to save the edited card
+        function saveEditedCard() {
+            if (flashcards.length === 0) return;
+            flashcards[currentCardIndex].question = questionInput.value;
+            flashcards[currentCardIndex].answer = answerInput.value;
+            
+            // Save changes and update UI
+            saveFlashcards();
+            isEditing = false;
+            toggleFormButtons();
+            updateUI();
+            switchView('flashcard');
+            showMessage('Changes saved!', 'success');
+        }
+        
+        // Function to toggle between add and save buttons
+        function toggleFormButtons() {
+            if (isEditing) {
+                addCardBtn.style.display = 'none';
+                saveEditBtn.style.display = 'block';
+            } else {
+                addCardBtn.style.display = 'block';
+                saveEditBtn.style.display = 'none';
+                // Clear the form fields when not editing
+                questionInput.value = '';
+                answerInput.value = '';
+            }
+        }
+        
+        // Function to shuffle the flashcard array
+        function shuffleDeck() {
+            if (flashcards.length <= 1) return;
+            
+            isEditing = false;
+            toggleFormButtons();
+
+            // Fisher-Yates shuffle algorithm
+            for (let i = flashcards.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [flashcards[i], flashcards[j]] = [flashcards[j], flashcards[i]];
+            }
+            
+            // Reset index to the first card after shuffling
+            currentCardIndex = 0;
+
+            // Save the new order and update the UI
+            saveFlashcards();
+            if (isFlipped) {
+                flashcardElement.classList.remove('is-flipped');
+                isFlipped = false;
+                setTimeout(updateUI, 400);
+            } else {
+                updateUI();
+            }
+            showMessage('Flashcards shuffled!', 'success');
+        }
+
+        // Event listeners for the tab buttons
+        viewCardsTab.addEventListener('click', () => {
+            isEditing = false;
+            toggleFormButtons();
+            switchView('flashcard');
+        });
+        
+        manageCardsTab.addEventListener('click', () => {
+            isEditing = false;
+            toggleFormButtons();
+            switchView('form');
         });
 
-        // Event listeners for the navigation buttons
+        // Event listeners for the navigation and action buttons
         flipBtn.addEventListener('click', flipCard);
         nextBtn.addEventListener('click', nextCard);
         prevBtn.addEventListener('click', prevCard);
         deleteBtn.addEventListener('click', deleteCard);
+        editBtn.addEventListener('click', editCard);
+        shuffleBtn.addEventListener('click', shuffleDeck);
+        addCardBtn.addEventListener('click', addCard);
+        saveEditBtn.addEventListener('click', saveEditedCard);
 
         // Initial setup on page load
         loadFlashcards();
