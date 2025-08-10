@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flashcard App</title>
+    <style>
+        /* General styling for the body and container */
+        body {
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f2f5;
+            margin: 0;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .flashcard-container {
+            perspective: 1000px;
+            width: 90%;
+            max-width: 500px;
+            height: 300px;
+            margin-bottom: 20px;
+        }
+
+        /* Styling for the card itself */
+        .flashcard {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.8s;
+            transform-style: preserve-3d;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        /* The flip effect */
+        .flashcard.is-flipped {
+            transform: rotateY(180deg);
+        }
+
+        /* Front and back of the card */
+        .flashcard-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5em;
+            padding: 20px;
+            box-sizing: border-box;
+            border-radius: 15px;
+            color: #333;
+        }
+
+        .flashcard-front {
+            background-color: #ffffff;
+        }
+
+        .flashcard-back {
+            background-color: #e0f7fa;
+            transform: rotateY(180deg);
+        }
+
+        /* Styling for the buttons */
+        .controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            font-size: 1em;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-flip {
+            background-color: #007bff;
+            color: white;
+        }
+
+        .btn-prev, .btn-next {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        /* Small screen adjustments */
+        @media (max-width: 600px) {
+            .flashcard-container {
+                height: 250px;
+            }
+
+            .flashcard-face {
+                font-size: 1.2em;
+            }
+
+            .btn {
+                padding: 10px 20px;
+                font-size: 0.9em;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="flashcard-container">
+        <div id="flashcard" class="flashcard">
+            <div id="flashcard-front" class="flashcard-face flashcard-front">
+                Question
+            </div>
+            <div id="flashcard-back" class="flashcard-face flashcard-back">
+                Answer
+            </div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button id="prev-btn" class="btn btn-prev">Previous</button>
+        <button id="flip-btn" class="btn btn-flip">Flip</button>
+        <button id="next-btn" class="btn btn-next">Next</button>
+    </div>
+
+    <script>
+        // An array of flashcards, each with a question and an answer.
+        const flashcards = [
+            { question: "What is the capital of France?", answer: "Paris" },
+            { question: "Who wrote 'Romeo and Juliet'?", answer: "William Shakespeare" },
+            { question: "What is the chemical symbol for water?", answer: "H2O" },
+            { question: "What is the largest planet in our solar system?", answer: "Jupiter" },
+            { question: "What is the square root of 64?", answer: "8" }
+        ];
+
+        let currentCardIndex = 0;
+        let isFlipped = false;
+
+        // Get references to the HTML elements
+        const flashcardElement = document.getElementById('flashcard');
+        const frontElement = document.getElementById('flashcard-front');
+        const backElement = document.getElementById('flashcard-back');
+        const flipBtn = document.getElementById('flip-btn');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+
+        // Function to update the flashcard content based on the current index
+        function updateCardContent() {
+            const currentCard = flashcards[currentCardIndex];
+            frontElement.textContent = currentCard.question;
+            backElement.textContent = currentCard.answer;
+        }
+
+        // Function to handle the flip action
+        function flipCard() {
+            isFlipped = !isFlipped;
+            if (isFlipped) {
+                flashcardElement.classList.add('is-flipped');
+            } else {
+                flashcardElement.classList.remove('is-flipped');
+            }
+        }
+
+        // Function to move to the next card
+        function nextCard() {
+            currentCardIndex = (currentCardIndex + 1) % flashcards.length;
+            if (isFlipped) {
+                // Unflip the card before changing content for a smooth transition
+                flashcardElement.classList.remove('is-flipped');
+                isFlipped = false;
+                setTimeout(updateCardContent, 400); // Wait for the unflip animation to finish
+            } else {
+                updateCardContent();
+            }
+        }
+
+        // Function to move to the previous card
+        function prevCard() {
+            currentCardIndex = (currentCardIndex - 1 + flashcards.length) % flashcards.length;
+            if (isFlipped) {
+                // Unflip the card before changing content for a smooth transition
+                flashcardElement.classList.remove('is-flipped');
+                isFlipped = false;
+                setTimeout(updateCardContent, 400); // Wait for the unflip animation to finish
+            } else {
+                updateCardContent();
+            }
+        }
+
+        // Event listeners for the buttons
+        flipBtn.addEventListener('click', flipCard);
+        nextBtn.addEventListener('click', nextCard);
+        prevBtn.addEventListener('click', prevCard);
+
+        // Initial setup
+        updateCardContent();
+    </script>
+</body>
+</html>
