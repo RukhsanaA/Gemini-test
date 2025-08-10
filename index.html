@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -592,16 +591,27 @@
         }
         
         // --- Core Flashcard Logic ---
-        
-        // Function to load some initial cards
-        function loadInitialCards() {
-            return [
-                { question: "What is the capital of France?", answer: "Paris" },
-                { question: "Who wrote 'To Kill a Mockingbird'?", answer: "Harper Lee" },
-                { question: "What is the chemical symbol for water?", answer: "H2O" }
-            ];
+
+        // Function to save the flashcards array to localStorage
+        function saveCards() {
+            localStorage.setItem('flashcards', JSON.stringify(flashcards));
         }
 
+        // Function to load flashcards from localStorage
+        function loadCards() {
+            const storedCards = localStorage.getItem('flashcards');
+            if (storedCards) {
+                flashcards = JSON.parse(storedCards);
+            } else {
+                // Load some initial cards if there are none in storage
+                flashcards = [
+                    { question: "What is the capital of France?", answer: "Paris" },
+                    { question: "Who wrote 'To Kill a Mockingbird'?", answer: "Harper Lee" },
+                    { question: "What is the chemical symbol for water?", answer: "H2O" }
+                ];
+            }
+        }
+        
         // Function to switch between the two views
         function switchView(view) {
             if (view === 'flashcard') {
@@ -703,6 +713,7 @@
             if (currentCardIndex >= flashcards.length) {
                 currentCardIndex = Math.max(0, flashcards.length - 1);
             }
+            saveCards(); // Save after deletion
             updateUI();
             showMessage('Flashcard deleted!', 'error', 'form');
         }
@@ -738,6 +749,7 @@
             if (newQuestion && newAnswer) {
                 flashcards.push({ question: newQuestion, answer: newAnswer });
                 cardForm.reset();
+                saveCards(); // Save after adding
                 updateUI();
                 showMessage('Flashcard added successfully!');
             } else {
@@ -765,6 +777,7 @@
                 flashcards[currentCardIndex].answer = newAnswer;
                 isEditing = false;
                 toggleFormButtons();
+                saveCards(); // Save after editing
                 updateUI();
                 switchView('flashcard');
                 showMessage('Flashcard changes saved!', 'success');
@@ -852,6 +865,7 @@
                 const newCards = JSON.parse(result);
                 flashcards = newCards;
                 currentCardIndex = 0;
+                saveCards(); // Save the new deck
                 updateUI();
                 switchView('flashcard');
                 showMessage(`Generated a deck of ${newCards.length} cards on "${topic}"!`, 'success', 'ai');
@@ -895,7 +909,7 @@
         generateDeckBtn.addEventListener('click', generateDeck);
 
         // Initial setup
-        flashcards = loadInitialCards();
+        loadCards(); // Load cards from localStorage on startup
         updateUI();
     </script>
 </body>
