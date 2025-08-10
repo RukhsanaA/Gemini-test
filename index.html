@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -496,7 +497,9 @@
     </div>
     
     <div id="user-info" class="info-bar" style="margin-top: 20px;">
-        <div id="user-id-display"></div>
+        <div id="auth-status">
+            <button id="authorize-btn" class="btn btn-secondary">Connect to Google Drive</button>
+        </div>
     </div>
     
     <!-- The Modal -->
@@ -508,24 +511,15 @@
         </div>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, collection, query, addDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Global variables for Firebase configuration and app ID
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : '';
-        
-        let db;
-        let auth;
-        let userId;
+    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+    <script>
+        // An empty array to store our flashcards in memory
         let flashcards = [];
         let currentCardIndex = 0;
         let isFlipped = false;
         let isEditing = false;
-        let unsubscribe = null; // To store the onSnapshot listener
+        let driveFileId = null;
+        let authState = false;
 
         // Get references to the HTML elements
         const flashcardView = document.getElementById('flashcard-view');
@@ -554,7 +548,9 @@
         const saveEditBtn = document.getElementById('save-edit-btn');
         const messageElement = document.getElementById('message');
         const aiMessageElement = document.getElementById('ai-message');
-        const userIdDisplay = document.getElementById('user-id-display');
+        
+        const authorizeBtn = document.getElementById('authorize-btn');
+        const authStatus = document.getElementById('auth-status');
         
         const generateAnswerBtn = document.getElementById('generate-answer-btn');
         const topicInput = document.getElementById('topic-input');
@@ -564,6 +560,16 @@
         const closeModalBtn = document.querySelector('.close-btn');
         const explanationTitle = document.getElementById('explanation-title');
         const explanationContent = document.getElementById('explanation-content');
+        
+        // Google API client credentials
+        const CLIENT_ID = 'YOUR_CLIENT_ID'; // Replace with your actual client ID
+        const API_KEY = 'YOUR_API_KEY'; // Replace with your actual API key
+        const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
+        const FILE_NAME = 'flashcards.json';
+        
+        let tokenClient;
+        let gapiInited = false;
+        let gisInited = false;
         
         // Helper function for exponential backoff
         async function fetchWithBackoff(url, options, retries = 5, delay = 1000) {
@@ -617,6 +623,178 @@
             } else {
                 console.error("Unexpected API response structure:", result);
                 throw new Error("API did not return a valid response.");
+            }
+        }
+        
+        // --- Google Drive Integration Functions ---
+        
+        /**
+         * Callback after api.js is loaded.
+         */
+        function gapiLoaded() {
+          gapi.load('client', initializeGapiClient);
+        }
+
+        /**
+         * Callback after the API client is loaded. Loads the
+         * discovery doc to initialize the API.
+         */
+        async function initializeGapiClient() {
+          await gapi.client.init({
+            apiKey: API_KEY,
+            discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
+          });
+          gapiInited = true;
+          maybeEnableButtons();
+        }
+
+        /**
+         * Callback after GIS client is loaded.
+         */
+        function gisLoaded() {
+          tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: CLIENT_ID,
+            scope: SCOPES,
+            callback: '', // defined at request time
+          });
+          gisInited = true;
+          maybeEnableButtons();
+        }
+
+        /**
+         * Enables user interaction buttons after both gapi and gis are loaded.
+         */
+        function maybeEnableButtons() {
+            if (gapiInited && gisInited) {
+                authorizeBtn.disabled = false;
+            }
+        }
+
+        /**
+         * Sign in the user upon button click.
+         */
+        function handleAuthClick() {
+            tokenClient.callback = async (resp) => {
+                if (resp.error !== 'popup_closed' && resp.error !== 'access_denied') {
+                    console.log('Authentication successful!');
+                    authState = true;
+                    authStatus.innerHTML = '<span style="color: #00703c; font-weight: bold;">Google Drive Connected!</span>';
+                    authorizeBtn.style.display = 'none';
+                    await loadCardsFromDrive();
+                } else {
+                    console.error('Authentication failed:', resp.error);
+                    authState = false;
+                    authStatus.innerHTML = '<span style="color: #d4351c; font-weight: bold;">Connection Failed. Please try again.</span>';
+                }
+            };
+            
+            // Check if a token already exists
+            if (gapi.client.getToken() === null) {
+                tokenClient.requestAccessToken({prompt: 'consent'});
+            } else {
+                tokenClient.requestAccessToken({prompt: ''});
+            }
+        }
+        
+        /**
+         * Loads the flashcard data from Google Drive.
+         */
+        async function loadCardsFromDrive() {
+            if (!authState) {
+                console.error('Not authenticated.');
+                return;
+            }
+            
+            // Show loading spinner
+            loadingSpinner.style.display = 'flex';
+            flashcardDisplay.style.display = 'none';
+            
+            try {
+                // Check if the flashcard file exists in the appDataFolder
+                const response = await gapi.client.drive.files.list({
+                    'spaces': 'appDataFolder',
+                    'q': `name='${FILE_NAME}'`,
+                    'fields': 'files(id)'
+                });
+                
+                const files = response.result.files;
+                if (files.length > 0) {
+                    driveFileId = files[0].id;
+                    const fileContent = await gapi.client.drive.files.get({
+                        'fileId': driveFileId,
+                        'alt': 'media'
+                    });
+                    
+                    const newCards = JSON.parse(fileContent.body);
+                    if (newCards.length > 0) {
+                        flashcards = newCards;
+                        currentCardIndex = 0;
+                        updateUI();
+                        showMessage('Flashcards loaded from Google Drive!', 'success');
+                    } else {
+                        flashcards = [];
+                        updateUI();
+                        showMessage('Google Drive file is empty. Add new cards.', 'error');
+                    }
+                } else {
+                    // File doesn't exist, create it with initial data
+                    await saveFileToDrive(loadInitialCards(false));
+                    showMessage('Created new flashcard file in Google Drive.', 'success');
+                }
+            } catch (error) {
+                console.error('Error loading cards from Google Drive:', error);
+                showMessage('Error loading cards from Google Drive. Please check your connection.', 'error');
+            } finally {
+                loadingSpinner.style.display = 'none';
+                flashcardDisplay.style.display = 'block';
+            }
+        }
+
+        /**
+         * Saves the current flashcard data to Google Drive.
+         */
+        async function saveFileToDrive(data = flashcards) {
+            if (!authState) {
+                console.error('Not authenticated.');
+                return;
+            }
+            
+            const fileContent = JSON.stringify(data, null, 2);
+            
+            // If the file already exists, update it. Otherwise, create a new one.
+            if (driveFileId) {
+                try {
+                    await gapi.client.request({
+                        path: `/upload/drive/v3/files/${driveFileId}`,
+                        method: 'PATCH',
+                        params: { uploadType: 'media' },
+                        headers: { 'Content-Type': 'application/json' },
+                        body: fileContent
+                    });
+                    showMessage('Flashcards saved to Google Drive.', 'success');
+                } catch (error) {
+                    console.error('Error updating file in Google Drive:', error);
+                    showMessage('Error saving file to Google Drive. Check permissions.', 'error');
+                }
+            } else {
+                try {
+                    const response = await gapi.client.drive.files.create({
+                        resource: {
+                            'name': FILE_NAME,
+                            'mimeType': 'application/json',
+                            'parents': ['appDataFolder']
+                        },
+                        'media': {
+                            'mimeType': 'application/json',
+                            'body': fileContent
+                        }
+                    });
+                    driveFileId = response.result.id;
+                    showMessage('Flashcards saved to a new file in Google Drive.', 'success');
+                } catch (error) {
+                    console.error('Error creating file in Google Drive:', error);
+                    showMessage('Error creating file in Google Drive. Check permissions.', 'error');
+                }
             }
         }
 
@@ -715,45 +893,34 @@
         }
         
         // Function to delete the current card
-        async function deleteCard() {
-            if (!db || !userId || flashcards.length === 0) return;
-            try {
-                // Get the ID of the current card to delete
-                const cardToDelete = flashcards[currentCardIndex];
-                await deleteDoc(doc(db, `/artifacts/${appId}/public/data/flashcards/${cardToDelete.id}`));
-                showMessage('Flashcard deleted!', 'error', 'form');
-            } catch (e) {
-                console.error("Error deleting flashcard:", e);
-                showMessage('Error deleting flashcard!', 'error', 'form');
+        function deleteCard() {
+            if (flashcards.length === 0) return;
+            flashcards.splice(currentCardIndex, 1);
+            if (currentCardIndex >= flashcards.length) {
+                currentCardIndex = Math.max(0, flashcards.length - 1);
             }
+            updateUI();
+            saveFileToDrive();
+            showMessage('Flashcard deleted!', 'error', 'form');
         }
         
         // Function to handle adding a new flashcard
-        async function addCard(e) {
+        function addCard(e) {
             e.preventDefault(); 
-            if (!db || !userId) return;
-
             const newQuestion = questionInput.value;
             const newAnswer = answerInput.value;
             
-            try {
-                await addDoc(collection(db, `/artifacts/${appId}/public/data/flashcards`), {
-                    question: newQuestion,
-                    answer: newAnswer,
-                    userId: userId,
-                    createdAt: new Date()
-                });
-
-                // Clear the form inputs
+            if (newQuestion && newAnswer) {
+                flashcards.push({ question: newQuestion, answer: newAnswer });
                 questionInput.value = '';
                 answerInput.value = '';
-
-                // Switch back to view cards
+                currentCardIndex = flashcards.length - 1;
+                updateUI();
+                saveFileToDrive();
                 switchView('flashcard');
                 showMessage('Flashcard added successfully!', 'success', 'form');
-            } catch (e) {
-                console.error("Error adding flashcard:", e);
-                showMessage('Error adding flashcard!', 'error', 'form');
+            } else {
+                showMessage('Please fill out both fields.', 'error', 'form');
             }
         }
 
@@ -771,26 +938,18 @@
         }
 
         // Function to save the edited card
-        async function saveEditedCard() {
-            if (!db || !userId || flashcards.length === 0) return;
-            const cardToUpdate = flashcards[currentCardIndex];
-            
-            try {
-                await setDoc(doc(db, `/artifacts/${appId}/public/data/flashcards/${cardToUpdate.id}`), {
-                    question: questionInput.value,
-                    answer: answerInput.value,
-                    userId: userId
-                }, { merge: true });
+        function saveEditedCard() {
+            if (flashcards.length === 0) return;
+            flashcards[currentCardIndex].question = questionInput.value;
+            flashcards[currentCardIndex].answer = answerInput.value;
 
-                // Clear the form fields and switch back to view cards
-                isEditing = false;
-                toggleFormButtons();
-                switchView('flashcard');
-                showMessage('Changes saved!', 'success', 'form');
-            } catch (e) {
-                console.error("Error saving flashcard:", e);
-                showMessage('Error saving flashcard!', 'error', 'form');
-            }
+            // Clear the form fields and switch back to view cards
+            isEditing = false;
+            toggleFormButtons();
+            updateUI();
+            saveFileToDrive();
+            switchView('flashcard');
+            showMessage('Changes saved!', 'success', 'form');
         }
         
         // Function to toggle between add and save buttons
@@ -881,16 +1040,12 @@
                 const jsonResponse = await fetchGeminiResponse(prompt, schema);
                 const newCards = JSON.parse(jsonResponse);
                 
-                for (const card of newCards) {
-                    await addDoc(collection(db, `/artifacts/${appId}/public/data/flashcards`), {
-                        question: card.question,
-                        answer: card.answer,
-                        userId: userId,
-                        createdAt: new Date()
-                    });
-                }
+                flashcards.push(...newCards);
                 
                 topicInput.value = '';
+                currentCardIndex = flashcards.length > 0 ? flashcards.length - 1 : 0;
+                updateUI();
+                saveFileToDrive();
                 switchView('flashcard');
                 showMessage('Deck generated and added!', 'success', 'ai');
             } catch (e) {
@@ -932,65 +1087,14 @@
             explanationModal.style.display = 'none';
         }
 
-        // Main function to initialize Firebase and load data
-        async function init() {
-            // Display loading spinner
-            flashcardDisplay.style.display = 'none';
-            loadingSpinner.style.display = 'flex';
-            
-            const app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
-            
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    userId = user.uid;
-                    userIdDisplay.textContent = `User ID: ${userId}`;
-                    if (unsubscribe) {
-                        unsubscribe(); // Unsubscribe from previous listener
-                    }
-                    await setupFlashcardListener();
-                } else {
-                    // Sign in with the provided custom token
-                    try {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                    } catch (error) {
-                        console.error("Authentication failed:", error);
-                        alert("Authentication failed. Please check your token.");
-                    }
-                }
-            });
-        }
-        
-        // Setup real-time listener for flashcards from Firestore
-        function setupFlashcardListener() {
-            if (!db || !userId) return;
-            const q = query(collection(db, `/artifacts/${appId}/public/data/flashcards`));
-            
-            unsubscribe = onSnapshot(q, (querySnapshot) => {
-                flashcards = [];
-                querySnapshot.forEach((doc) => {
-                    flashcards.push({ id: doc.id, ...doc.data() });
-                });
-                
-                // Sort the cards by creation date (if available)
-                flashcards.sort((a, b) => a.createdAt - b.createdAt);
-
-                // Adjust the current index if the list of cards changed
-                if (currentCardIndex >= flashcards.length && flashcards.length > 0) {
-                    currentCardIndex = flashcards.length - 1;
-                } else if (flashcards.length === 0) {
-                    currentCardIndex = 0;
-                }
-
-                updateUI();
-            }, (error) => {
-                console.error("Error getting flashcards:", error);
-                showMessage('Error loading flashcards!', 'error', 'form');
-                // Hide spinner even on error
-                loadingSpinner.style.display = 'none';
-                flashcardDisplay.style.display = 'block';
-            });
+        function loadInitialCards(doSave = true) {
+            flashcards = [
+                { question: "What is the capital of France?", answer: "Paris" },
+                { question: "What is the powerhouse of the cell?", answer: "Mitochondria" },
+                { question: "What is the largest planet in our solar system?", answer: "Jupiter" }
+            ];
+            updateUI();
+            if (doSave) saveFileToDrive();
         }
 
         // Event listeners for the tab buttons
@@ -1009,11 +1113,11 @@
         // Event listeners for the navigation and action buttons
         flipBtn.addEventListener('click', flipCard);
         nextBtn.addEventListener('click', nextCard);
-            prevBtn.addEventListener('click', prevCard);
+        prevBtn.addEventListener('click', prevCard);
         deleteBtn.addEventListener('click', deleteCard);
         editBtn.addEventListener('click', editCard);
         shuffleBtn.addEventListener('click', shuffleDeck);
-        addCardBtn.addEventListener('click', addCard);
+        cardForm.addEventListener('submit', addCard);
         saveEditBtn.addEventListener('click', saveEditedCard);
         
         // Event listeners for new Gemini API features
@@ -1027,9 +1131,15 @@
                 closeModal();
             }
         });
-
+        
+        authorizeBtn.addEventListener('click', handleAuthClick);
+        
         // Initial setup on page load
-        init();
+        document.addEventListener('DOMContentLoaded', () => {
+            loadInitialCards(false);
+            // gisLoaded() is called by the script tag
+        });
     </script>
+    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 </body>
 </html>
